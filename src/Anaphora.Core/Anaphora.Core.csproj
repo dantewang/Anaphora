@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Profile models, ROI definitions and serialization. Deliberately free of any
+       Windows or UI dependency so it stays trivially testable. -->
+  <PropertyGroup>
+    <TargetFramework>$(AnaphoraTargetFramework)</TargetFramework>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Anaphora.Analysis/Anaphora.Analysis.csproj" />
+    <Project Path="src/Anaphora.App/Anaphora.App.csproj" />
+    <Project Path="src/Anaphora.Capture/Anaphora.Capture.csproj" />
+    <Project Path="src/Anaphora.Core/Anaphora.Core.csproj" />
+    <Project Path="src/Anaphora.Overlay/Anaphora.Overlay.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Anaphora.Analysis.Tests/Anaphora.Analysis.Tests.csproj" />
+  </Folder>
+</Solution>

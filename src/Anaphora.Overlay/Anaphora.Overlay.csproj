@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The click-through, always-on-top Avalonia window that tracks the game window.
+       Rendering lives behind an interface so it can be swapped for a hand-rolled
+       DirectComposition surface if Avalonia's transparency misbehaves. -->
+  <PropertyGroup>
+    <TargetFramework>$(AnaphoraWindowsTargetFramework)</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Anaphora.Core/Anaphora.Core.csproj" />
+  </ItemGroup>
+
+</Project>

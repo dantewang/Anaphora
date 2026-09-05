@@ -1,0 +1,20 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Windows-facing projects. Compiled against the 24H2 SDK projections but
+       required to keep running on Win10 2004, which is the WGC baseline we support. -->
+  <PropertyGroup>
+    <AnaphoraWindowsTargetFramework>net10.0-windows10.0.26100.0</AnaphoraWindowsTargetFramework>
+    <AnaphoraTargetFramework>net10.0</AnaphoraTargetFramework>
+  </PropertyGroup>
+
+</Project>

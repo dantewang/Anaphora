@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure-CPU readers that turn ROI pixel buffers into values: bar fill ratios,
+       icon on/off/cooldown states, portrait matching. No GPU, no Windows API. -->
+  <PropertyGroup>
+    <TargetFramework>$(AnaphoraTargetFramework)</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Anaphora.Core/Anaphora.Core.csproj" />
+  </ItemGroup>
+
+</Project>
