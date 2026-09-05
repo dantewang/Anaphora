@@ -45,38 +45,30 @@ tests/Anaphora.Analysis.Tests
 Avalonia 12 是较新的大版本，与 11.x 有 API 差异，且模型的训练语料主要是 11.x。
 **遇到任何 Avalonia API 问题，先查 avalonia-docs MCP，不要凭记忆写。**
 
-### DevTools
+### avalonia-docs MCP 是厂商工具，注意商业倾向
 
-`Avalonia.Diagnostics` **已废弃**，没有 12.x 版本，任何情况下都不要再引用它。
-替代品是 `AvaloniaUI.DiagnosticsSupport` 包（已在 CPM 中，2.2.3）＋
-`AvaloniaUI.DeveloperTools` 全局工具（已安装，命令为 `avdt`）。它是独立版本线，
-不跟随 Avalonia 版本号。
+这个 MCP 由 Avalonia 官方（AvaloniaUI OÜ）维护。它的 API / 文档查询是可信的，但
+**涉及工具链的指引会默认推荐自家商业套件 Avalonia Accelerate，且不会提示授权前提**。
+`migrate_diagnostics` 就是一例：它要求安装需要 license 才能打开的 DevTools，
+却完全没提这件事。**跟随任何 MCP 给出的工具链安装指引前，先确认授权与费用。**
 
-写下 `Program.cs` / `App.axaml.cs` 时必须同时接上这两处，缺一不可 ——
-`.WithDeveloperTools()` 启用基础设施，`AttachDeveloperTools()` 才真正连上 DevTools 进程：
+### DevTools：目前没有接，是有意的
 
-```csharp
-// Program.cs
-public static AppBuilder BuildAvaloniaApp()
-    => AppBuilder.Configure<App>()
-        .UsePlatformDetect()
-        .WithDeveloperTools()
-        .LogToTrace();
+Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
+`Avalonia.Diagnostics` 停在 11.3.20，**不要再引用它，也不要用它的
+`AttachDevTools()` API**。官方替代品 `AvaloniaUI.DiagnosticsSupport` +
+`AvaloniaUI.DeveloperTools`（`avdt`）属于 Avalonia Accelerate，**需要 license
+才能实际打开 DevTools**。本工程未授权，因此这两者都不引用、也不要再自行加回。
 
-// App.axaml.cs
-public override void Initialize()
-{
-    AvaloniaXamlLoader.Load(this);
-#if DEBUG
-    this.AttachDeveloperTools();
-#endif
-}
-```
+如果之后确实需要可视化调试，有两条免费路，届时由项目所有者决定：
 
-API 叫 `AttachDeveloperTools()`，不是 11.x 时代的 `AttachDevTools()`；也不要写
-`using Avalonia.Diagnostics;`。连不上时把调用改成
-`this.AttachDeveloperTools(o => o.DiagnosticLogger = DiagnosticLogger.CreateConsole())`
-（需 `using AvaloniaUI.DiagnosticsProtocol;`），日志直接打到 stdout。
+1. **Avalonia Accelerate Community Edition**（$0）。个人开发者（含商业项目）、
+   ≤5 并发用户的非 Enterprise 组织、教育机构均符合资格；Enterprise 界定为
+   >250 用户或年营收 >€1,000,000。含 Dev Tools、VS 扩展、Parcel 打包。
+   需在 Avalonia portal 注册账号并领取 license。
+2. **`ClassicDiagnostics.Avalonia`**（MIT，社区维护）。把 Avalonia 11 的
+   F12 DevTools 代码移植到 12+，API 仍是 `this.AttachDevTools()`。
+   截至写下时仅 0.0.2-preview、下载量约 400，成熟度很低。
 
 ## 已确定的技术约束与坑
 

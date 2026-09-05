@@ -21,9 +21,6 @@
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
-    <!-- Unconditional on purpose: BuildAvaloniaApp() calls .WithDeveloperTools()
-         outside any #if, only the AttachDeveloperTools() call is Debug-gated. -->
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
   </ItemGroup>
