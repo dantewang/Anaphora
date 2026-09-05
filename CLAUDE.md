@@ -45,6 +45,39 @@ tests/Anaphora.Analysis.Tests
 Avalonia 12 是较新的大版本，与 11.x 有 API 差异，且模型的训练语料主要是 11.x。
 **遇到任何 Avalonia API 问题，先查 avalonia-docs MCP，不要凭记忆写。**
 
+### DevTools
+
+`Avalonia.Diagnostics` **已废弃**，没有 12.x 版本，任何情况下都不要再引用它。
+替代品是 `AvaloniaUI.DiagnosticsSupport` 包（已在 CPM 中，2.2.3）＋
+`AvaloniaUI.DeveloperTools` 全局工具（已安装，命令为 `avdt`）。它是独立版本线，
+不跟随 Avalonia 版本号。
+
+写下 `Program.cs` / `App.axaml.cs` 时必须同时接上这两处，缺一不可 ——
+`.WithDeveloperTools()` 启用基础设施，`AttachDeveloperTools()` 才真正连上 DevTools 进程：
+
+```csharp
+// Program.cs
+public static AppBuilder BuildAvaloniaApp()
+    => AppBuilder.Configure<App>()
+        .UsePlatformDetect()
+        .WithDeveloperTools()
+        .LogToTrace();
+
+// App.axaml.cs
+public override void Initialize()
+{
+    AvaloniaXamlLoader.Load(this);
+#if DEBUG
+    this.AttachDeveloperTools();
+#endif
+}
+```
+
+API 叫 `AttachDeveloperTools()`，不是 11.x 时代的 `AttachDevTools()`；也不要写
+`using Avalonia.Diagnostics;`。连不上时把调用改成
+`this.AttachDeveloperTools(o => o.DiagnosticLogger = DiagnosticLogger.CreateConsole())`
+（需 `using AvaloniaUI.DiagnosticsProtocol;`），日志直接打到 stdout。
+
 ## 已确定的技术约束与坑
 
 - **不要用 WPF 的 `AllowsTransparency=true`**：会让窗口回退软件渲染。选 Avalonia 的
@@ -96,4 +129,11 @@ dotnet restore Anaphora.slnx
 dotnet build Anaphora.slnx
 dotnet test Anaphora.slnx
 dotnet run --project src/Anaphora.App
+avdt                                  # Avalonia DeveloperTools（全局工具）
 ```
+
+脚手架阶段 `Anaphora.App` 是 `WinExe` 但还没有入口点，`dotnet build` 会以 CS5001
+失败；其余五个项目编译干净。写下第一个 `Program.cs` 后即恢复正常。
+
+**这台机器上 `python` 是 WindowsApps 的占位 stub，静默失败什么都不做。**
+不要用它做文本替换或脚本处理，改用 Edit 工具或 `sed`。
