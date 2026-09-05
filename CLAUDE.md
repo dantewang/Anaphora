@@ -60,15 +60,17 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
 `AvaloniaUI.DeveloperTools`（`avdt`）属于 Avalonia Accelerate，**需要 license
 才能实际打开 DevTools**。本工程未授权，因此这两者都不引用、也不要再自行加回。
 
-如果之后确实需要可视化调试，有两条免费路，届时由项目所有者决定：
+**已决定：不接 DevTools。** 主 UI 的 XAML 复杂度不高，overlay 更几乎不需要可视化
+调试，现在引入是纯预支成本。**不要主动加回任何 DevTools 依赖。**
 
-1. **Avalonia Accelerate Community Edition**（$0）。个人开发者（含商业项目）、
-   ≤5 并发用户的非 Enterprise 组织、教育机构均符合资格；Enterprise 界定为
-   >250 用户或年营收 >€1,000,000。含 Dev Tools、VS 扩展、Parcel 打包。
-   需在 Avalonia portal 注册账号并领取 license。
-2. **`ClassicDiagnostics.Avalonia`**（MIT，社区维护）。把 Avalonia 11 的
-   F12 DevTools 代码移植到 12+，API 仍是 `this.AttachDevTools()`。
-   截至写下时仅 0.0.2-preview、下载量约 400，成熟度很低。
+将来真被布局问题卡住时，首选 **Avalonia Accelerate Community Edition**（$0，
+需在 Avalonia portal 注册账号领 license）。个人开发者（含商业项目）、≤5 并发用户的
+非 Enterprise 组织、教育机构均符合资格；Enterprise 界定为 >250 用户或年营收
+>€1,000,000。含 Dev Tools、VS 扩展、Parcel 打包，不含 Accelerate 的 UI 组件与技术支持。
+
+另有 `ClassicDiagnostics.Avalonia`（MIT 社区移植，API 仍是 `this.AttachDevTools()`），
+但截至写下时仅 0.0.2-preview、下载量约 400，**不推荐**：调试工具本身不稳定时，
+分不清 bug 是自己的还是它的。
 
 ## 已确定的技术约束与坑
 
