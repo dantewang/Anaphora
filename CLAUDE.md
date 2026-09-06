@@ -142,10 +142,15 @@ dotnet build Anaphora.slnx
 dotnet test Anaphora.slnx
 dotnet run --project src/Anaphora.App
 
-# WGC 可行性探针。参数：进程名（默认 Endfield）、输出目录（默认 bin 下的 captures/）。
+# WGC 可行性探针。参数：进程名（默认 Endfield）、输出目录。
 # 打印窗口信息 / display affinity / 帧率 / 亮度统计，并落三张 PNG：全图、1280 宽预览、
 # 左上角原分辨率切片。换游戏或换机器时重跑一次。
-dotnet run --project tools/Anaphora.CaptureProbe -- Endfield captures
+dotnet run --project tools/Anaphora.CaptureProbe -- probe Endfield captures
+
+# 连拍，用来收集标 ROI 的素材。参数依次为：进程名、输出目录、时长秒、间隔毫秒、
+# 前置等待秒、每隔几张存一张原分辨率（其余只存 1280 宽缩略）。
+# 4K PNG 单张约 15MB，别对每一帧都存全分辨率。产物含 manifest.csv（序号/时刻/平均亮度）。
+dotnet run --project tools/Anaphora.CaptureProbe -- burst Endfield captures/combat 90 1000 0 4
 ```
 
 脚手架阶段 `Anaphora.App` 是 `WinExe` 但还没有入口点，`dotnet build` 会以 CS5001
