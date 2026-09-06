@@ -24,13 +24,19 @@ internal static class Program
         // The verb is optional so the original "probe <process> <dir>" form still works.
         string verb = "probe";
         int offset = 0;
-        if (args.Length > 0 && args[0] is "probe" or "burst")
+        if (args.Length > 0 && args[0] is "probe" or "burst" or "crop")
         {
             verb = args[0];
             offset = 1;
         }
 
         string[] rest = args[offset..];
+
+        // crop works on files that already exist; it needs no game and no window.
+        if (verb == "crop")
+        {
+            return CropCommand.Run(rest);
+        }
 
         string processName = rest.Length > 0 ? rest[0] : "Endfield";
         string outputDirectory = rest.Length > 1
