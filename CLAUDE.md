@@ -50,7 +50,9 @@ src/Anaphora.Capture    WGC 会话、D3D11 设备、ROI 图集 shader、staging 
 src/Anaphora.Overlay    Avalonia 透明置顶穿透窗口，跟随游戏窗口
 src/Anaphora.App        入口 + 配置界面（选窗口、标 ROI、调阈值、实时预览）
 tests/Anaphora.Analysis.Tests
+tests/Anaphora.Core.Tests
 tools/Anaphora.CaptureProbe  一次性可行性探针：WGC 能不能拿到这个游戏的真实像素
+profiles/               每个游戏一个 JSON：窗口匹配、ROI 定义、阈值、头像哈希
 ```
 
 单进程、两个窗口。Capture 与 Overlay 共享一个进程，不做 IPC。
@@ -138,7 +140,9 @@ Unity 引擎。测试环境为无边框窗口 3840×2160，4K 显示器 + Window
 
 ### 待验证（尚未确认）
 
-- profile 目录还是空的，ROI 尚未标定。
+- `profiles/endfield.json` 里的**颜色与阈值全是占位值**，几何也是从截图上目测的。
+  等写读数器时拿 `captures/combat` 的 89 帧逐个标定。特别是 HUD 哨兵：连拍里技能点
+  从没归零过，所以"0 点时那条还在不在、长什么样"没有样本，现在的黄色签名很可能不对。
 - 长时间运行下的稳定性：游戏切分辨率 / alt-tab / 显示器切换时 `GraphicsCaptureItem`
   的 `Closed` 与帧池重建路径都还没测。
 

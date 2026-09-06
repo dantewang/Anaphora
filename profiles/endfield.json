@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "id": "endfield",
+  "displayName": "Arknights: Endfield",
+  "notes": "Bounds derived from captures/combat (3840x2160, 2026-09-06) by measuring frame-036 and the montages. Geometry is close but eyeballed; every colour and threshold is a placeholder to be calibrated against the captured frames when the readers are written. The sentinel in particular has never been seen at zero skill points.",
+  "window": {
+    "processName": "Endfield",
+    "windowClass": "UnityWndClass"
+  },
+  "hudSentinelRoiId": "hud.present",
+  "rois": [
+    {
+      "kind": "presence",
+      "id": "hud.present",
+      "label": "HUD present",
+      "bounds": { "x": 0.411458, "y": 0.897222, "width": 0.177083, "height": 0.018519 },
+      "signature": { "target": "#E5D14B", "tolerance": 0.18 },
+      "minimumCoverage": 0.02
+    },
+    {
+      "kind": "segmentedBar",
+      "id": "skillPoints",
+      "label": "技能点",
+      "bounds": { "x": 0.414063, "y": 0.900463, "width": 0.171875, "height": 0.011574 },
+      "segmentCount": 3,
+      "axis": "horizontal",
+      "segmentGap": 0.15,
+      "filled": { "target": "#E5D14B", "tolerance": 0.18 },
+      "filledCoverage": 0.6
+    },
+    {
+      "kind": "fillBar",
+      "id": "chain.0",
+      "label": "连携冷却 1",
+      "bounds": { "x": 0.020313, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "direction": "leftToRight",
+      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "readyRatio": 0.97
+    },
+    {
+      "kind": "fillBar",
+      "id": "chain.1",
+      "label": "连携冷却 2",
+      "bounds": { "x": 0.079688, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "direction": "leftToRight",
+      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "readyRatio": 0.97
+    },
+    {
+      "kind": "fillBar",
+      "id": "chain.2",
+      "label": "连携冷却 3",
+      "bounds": { "x": 0.139063, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "direction": "leftToRight",
+      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "readyRatio": 0.97
+    },
+    {
+      "kind": "fillBar",
+      "id": "chain.3",
+      "label": "连携冷却 4",
+      "bounds": { "x": 0.198438, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "direction": "leftToRight",
+      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "readyRatio": 0.97
+    },
+    {
+      "kind": "discState",
+      "id": "ultimate.0",
+      "label": "大招 1",
+      "bounds": { "x": 0.812760, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "innerRadius": 0.62,
+      "readyLuma": 60,
+      "readySaturation": 0.20
+    },
+    {
+      "kind": "discState",
+      "id": "ultimate.1",
+      "label": "大招 2",
+      "bounds": { "x": 0.862500, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "innerRadius": 0.62,
+      "readyLuma": 60,
+      "readySaturation": 0.20
+    },
+    {
+      "kind": "discState",
+      "id": "ultimate.2",
+      "label": "大招 3",
+      "bounds": { "x": 0.912240, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "innerRadius": 0.62,
+      "readyLuma": 60,
+      "readySaturation": 0.20
+    },
+    {
+      "kind": "discState",
+      "id": "ultimate.3",
+      "label": "大招 4",
+      "bounds": { "x": 0.961979, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "innerRadius": 0.62,
+      "readyLuma": 60,
+      "readySaturation": 0.20
+    },
+    {
+      "kind": "portraitSlot",
+      "id": "chainPrompt.0",
+      "label": "连携提示（先触发）",
+      "bounds": { "x": 0.594531, "y": 0.422222, "width": 0.039063, "height": 0.069444 },
+      "priority": 0,
+      "innerRadius": 0.80,
+      "maxHashDistance": 12
+    },
+    {
+      "kind": "portraitSlot",
+      "id": "chainPrompt.1",
+      "label": "连携提示（次）",
+      "bounds": { "x": 0.642969, "y": 0.440278, "width": 0.031250, "height": 0.055556 },
+      "priority": 1,
+      "innerRadius": 0.80,
+      "maxHashDistance": 12
+    }
+  ],
+  "portraits": []
+}
