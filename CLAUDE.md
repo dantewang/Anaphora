@@ -32,6 +32,7 @@ src/Anaphora.Capture    WGC 会话、D3D11 设备、ROI 图集 shader、staging 
 src/Anaphora.Overlay    Avalonia 透明置顶穿透窗口，跟随游戏窗口
 src/Anaphora.App        入口 + 配置界面（选窗口、标 ROI、调阈值、实时预览）
 tests/Anaphora.Analysis.Tests
+tools/Anaphora.CaptureProbe  一次性可行性探针：WGC 能不能拿到这个游戏的真实像素
 ```
 
 单进程、两个窗口。Capture 与 Overlay 共享一个进程，不做 IPC。
@@ -97,14 +98,31 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
 - ROI 坐标存成相对游戏客户区的归一化值，换分辨率不用重标。
 - 反作弊：不注入、不读内存、不 hook，行为等价于 OBS。
 
+### 已验证：WGC 对目标游戏可行（2026-09-06）
+
+目标游戏是 **Endfield**：`Endfield.exe`，窗口类 `UnityWndClass`，窗口标题 `Endfield`，
+Unity 引擎。测试环境为无边框窗口 3840×2160，4K 显示器 + Windows 150% 缩放。
+用 `tools/Anaphora.CaptureProbe` 实测结果：
+
+- `GetWindowDisplayAffinity` 返回 `WDA_NONE`——**没有设 `WDA_EXCLUDEFROMCAPTURE`**，
+  第一优先级的风险排除，方案成立。
+- 出帧正常：3.01 秒 156 帧，约 52 fps，跟着游戏 present 速率走，印证了"WGC 不限帧、
+  必须自己丢帧"这条。目标 15–30 Hz 意味着大约每两帧丢一帧。
+- 内容真实：非黑像素 88.4%，平均亮度 65/255，原分辨率切片里 UI 文字和图标边缘锐利，
+  足够做条填充率与图标状态判定。
+- 捕获纹理 3840×2160，row pitch 15360 = 宽×4，这台机器上暂时没有 padding；
+  **读回时仍必须按 `RowPitch` 逐行拷贝**，不能假设它等于宽×4。
+- `IsBorderRequired = false` 被直接接受，**没有先调 `RequestAccessAsync` 也没抛异常**，
+  黄框可去。本工程不依赖这一点（有黄框也接受），但既然免费就用上。
+- `GetDpiForWindow` 返回 144（150%）。**进程必须 PerMonitorV2**，否则 `GetClientRect`
+  会返回 2560×1440 的逻辑尺寸，而 WGC 纹理是 3840×2160 的物理尺寸，ROI 会整体错位。
+  探针里是运行时调 `SetProcessDpiAwarenessContext`，正式进程走 `app.manifest`。
+
 ### 待验证（尚未确认）
 
-- 目标游戏是否设置了 `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`。若设置了，
-  WGC 只会拿到黑帧且无解，项目不成立。**这是第一优先级的验证项。**
-- 去掉 WGC 黄色捕获边框需要 Win11 + `GraphicsCaptureSession.IsBorderRequired = false`，
-  且需先调用 `GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless)`；
-  打包应用还需 `graphicsCaptureWithoutBorder` 受限能力。需实测能否通过。
-- 目标游戏尚未确定，profile 目录还是空的。
+- profile 目录还是空的，ROI 尚未标定。
+- 长时间运行下的稳定性：游戏切分辨率 / alt-tab / 显示器切换时 `GraphicsCaptureItem`
+  的 `Closed` 与帧池重建路径都还没测。
 
 ## 抓取目标
 
@@ -123,7 +141,11 @@ dotnet restore Anaphora.slnx
 dotnet build Anaphora.slnx
 dotnet test Anaphora.slnx
 dotnet run --project src/Anaphora.App
-avdt                                  # Avalonia DeveloperTools（全局工具）
+
+# WGC 可行性探针。参数：进程名（默认 Endfield）、输出目录（默认 bin 下的 captures/）。
+# 打印窗口信息 / display affinity / 帧率 / 亮度统计，并落三张 PNG：全图、1280 宽预览、
+# 左上角原分辨率切片。换游戏或换机器时重跑一次。
+dotnet run --project tools/Anaphora.CaptureProbe -- Endfield captures
 ```
 
 脚手架阶段 `Anaphora.App` 是 `WinExe` 但还没有入口点，`dotnet build` 会以 CS5001

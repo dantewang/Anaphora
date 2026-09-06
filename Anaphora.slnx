@@ -6,6 +6,9 @@
     <Project Path="src/Anaphora.Core/Anaphora.Core.csproj" />
     <Project Path="src/Anaphora.Overlay/Anaphora.Overlay.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Anaphora.CaptureProbe/Anaphora.CaptureProbe.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Anaphora.Analysis.Tests/Anaphora.Analysis.Tests.csproj" />
   </Folder>
