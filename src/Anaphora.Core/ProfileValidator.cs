@@ -136,6 +136,11 @@ public static class ProfileValidator
                     yield return $"{where}: filledCoverage must be in (0, 1].";
                 }
 
+                if (bar.TailFraction is <= 0 or > 1)
+                {
+                    yield return $"{where}: tailFraction must be in (0, 1].";
+                }
+
                 if (!bar.Filled.IsValid)
                 {
                     yield return $"{where}: filled.tolerance must be in (0, 1].";
@@ -188,14 +193,24 @@ public static class ProfileValidator
                 break;
 
             case PresenceRoi presence:
-                if (presence.MinimumCoverage is <= 0 or > 1)
+                if (presence.DarkLuma is < 0 or > 255)
                 {
-                    yield return $"{where}: minimumCoverage must be in (0, 1].";
+                    yield return $"{where}: darkLuma must be in [0, 255].";
                 }
 
-                if (!presence.Signature.IsValid)
+                if (presence.MinimumDark is <= 0 or > 1)
                 {
-                    yield return $"{where}: signature.tolerance must be in (0, 1].";
+                    yield return $"{where}: minimumDark must be in (0, 1].";
+                }
+
+                if (presence.MinimumLit is <= 0 or > 1)
+                {
+                    yield return $"{where}: minimumLit must be in (0, 1].";
+                }
+
+                if (presence.MinimumDark + presence.MinimumLit > 1)
+                {
+                    yield return $"{where}: minimumDark plus minimumLit exceeds 1, so no frame can ever pass.";
                 }
 
                 break;

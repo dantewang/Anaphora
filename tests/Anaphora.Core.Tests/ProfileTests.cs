@@ -17,7 +17,6 @@ internal static class Sample
     {
         Id = "hud",
         Bounds = new NormalizedRect(0.4, 0.89, 0.18, 0.02),
-        Signature = new ColourGate(new Rgb(0xE5, 0xD1, 0x4B), 0.18),
     };
 }
 
@@ -79,9 +78,15 @@ public class ProfileStoreTests
     [Fact]
     public void ColoursAreWrittenAsHexStrings()
     {
-        string json = ProfileStore.Serialize(Sample.Profile());
+        string json = ProfileStore.Serialize(Sample.Profile(new SegmentedBarRoi
+        {
+            Id = "skillPoints",
+            Bounds = new NormalizedRect(0.414063, 0.900463, 0.171875, 0.011574),
+            SegmentCount = 3,
+            Filled = new ColourGate(new Rgb(0xF8, 0xF8, 0x00), 0.20),
+        }));
 
-        Assert.Contains("\"#E5D14B\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"#F8F800\"", json, StringComparison.Ordinal);
     }
 
     [Fact]

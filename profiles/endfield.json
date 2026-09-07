@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "endfield",
   "displayName": "Arknights: Endfield",
-  "notes": "Bounds derived from captures/combat (3840x2160, 2026-09-06) by measuring frame-036 and the montages. Geometry is close but eyeballed; every colour and threshold is a placeholder to be calibrated against the captured frames when the readers are written. The sentinel in particular has never been seen at zero skill points.",
+  "notes": "Calibrated against captures/combat at 3840x2160 (2026-09-06) with the probe's sample command. Bar edges, disc centres and colours are measured; the chain-prompt slots are still eyeballed to about +/-3px because no full-resolution frame in the burst contains a prompt. Measured colours: skill point filled #F8F800, filling #F8F8F8, track #101010; chain ready #F8F8F8, cooling #A0A0A0, track #101010; ultimate inner disc luma 182 when ready against 16-51 when charging.",
   "window": {
     "processName": "Endfield",
     "windowClass": "UnityWndClass"
@@ -13,92 +13,94 @@
       "kind": "presence",
       "id": "hud.present",
       "label": "HUD present",
-      "bounds": { "x": 0.411458, "y": 0.897222, "width": 0.177083, "height": 0.018519 },
-      "signature": { "target": "#E5D14B", "tolerance": 0.18 },
-      "minimumCoverage": 0.02
+      "bounds": { "x": 0.415625, "y": 0.902315, "width": 0.168750, "height": 0.012037 },
+      "darkLuma": 40,
+      "minimumDark": 0.08,
+      "minimumLit": 0.10
     },
     {
       "kind": "segmentedBar",
       "id": "skillPoints",
       "label": "技能点",
-      "bounds": { "x": 0.414063, "y": 0.900463, "width": 0.171875, "height": 0.011574 },
+      "bounds": { "x": 0.415625, "y": 0.906019, "width": 0.168750, "height": 0.002778 },
       "segmentCount": 3,
       "axis": "horizontal",
-      "segmentGap": 0.15,
-      "filled": { "target": "#E5D14B", "tolerance": 0.18 },
-      "filledCoverage": 0.6
+      "segmentGap": 0.10,
+      "filled": { "target": "#F8F800", "tolerance": 0.30 },
+      "tailFraction": 0.20,
+      "filledCoverage": 0.65
     },
     {
       "kind": "fillBar",
       "id": "chain.0",
       "label": "连携冷却 1",
-      "bounds": { "x": 0.020313, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "bounds": { "x": 0.022135, "y": 0.913426, "width": 0.043229, "height": 0.002778 },
       "direction": "leftToRight",
-      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "fill": { "target": "#A7A7A7", "tolerance": 0.37 },
       "readyRatio": 0.97
     },
     {
       "kind": "fillBar",
       "id": "chain.1",
       "label": "连携冷却 2",
-      "bounds": { "x": 0.079688, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "bounds": { "x": 0.082813, "y": 0.913426, "width": 0.043229, "height": 0.002778 },
       "direction": "leftToRight",
-      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "fill": { "target": "#A7A7A7", "tolerance": 0.37 },
       "readyRatio": 0.97
     },
     {
       "kind": "fillBar",
       "id": "chain.2",
       "label": "连携冷却 3",
-      "bounds": { "x": 0.139063, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "bounds": { "x": 0.143750, "y": 0.913426, "width": 0.043229, "height": 0.002778 },
       "direction": "leftToRight",
-      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "fill": { "target": "#A7A7A7", "tolerance": 0.37 },
       "readyRatio": 0.97
     },
     {
       "kind": "fillBar",
       "id": "chain.3",
       "label": "连携冷却 4",
-      "bounds": { "x": 0.198438, "y": 0.912037, "width": 0.049479, "height": 0.004630 },
+      "bounds": { "x": 0.204688, "y": 0.913426, "width": 0.043229, "height": 0.002778 },
       "direction": "leftToRight",
-      "fill": { "target": "#F0F0F0", "tolerance": 0.13 },
+      "fill": { "target": "#A7A7A7", "tolerance": 0.37 },
       "readyRatio": 0.97
     },
     {
       "kind": "discState",
       "id": "ultimate.0",
       "label": "大招 1",
-      "bounds": { "x": 0.812760, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "bounds": { "x": 0.811719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
       "innerRadius": 0.62,
-      "readyLuma": 60,
-      "readySaturation": 0.20
+      "readyLuma": 100,
+      "readySaturation": 0
     },
     {
       "kind": "discState",
       "id": "ultimate.1",
       "label": "大招 2",
-      "bounds": { "x": 0.862500, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "bounds": { "x": 0.861719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
       "innerRadius": 0.62,
-      "readyLuma": 60,
-      "readySaturation": 0.20
+      "readyLuma": 100,
+      "readySaturation": 0
     },
     {
       "kind": "discState",
       "id": "ultimate.2",
       "label": "大招 3",
-      "bounds": { "x": 0.912240, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "bounds": { "x": 0.911719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
       "innerRadius": 0.62,
-      "readyLuma": 60,
-      "readySaturation": 0.20
+      "readyLuma": 100,
+      "readySaturation": 0
     },
     {
       "kind": "discState",
       "id": "ultimate.3",
       "label": "大招 4",
-      "bounds": { "x": 0.961979, "y": 0.807870, "width": 0.017708, "height": 0.031481 },
+      "bounds": { "x": 0.961719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
       "innerRadius": 0.62,
-      "readyLuma": 60,
-      "readySaturation": 0.20
+      "readyLuma": 100,
+      "readySaturation": 0
     },
     {
       "kind": "portraitSlot",

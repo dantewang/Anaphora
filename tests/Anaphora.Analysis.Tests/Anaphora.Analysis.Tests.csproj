@@ -17,6 +17,18 @@
     <ProjectReference Include="../../src/Anaphora.Analysis/Anaphora.Analysis.csproj" />
   </ItemGroup>
 
+  <!-- The readers have to be judged against real pixels, which means decoding
+       PNG. Linking the probe's decoder rather than copying it keeps one
+       implementation; it is plain BCL code with no Windows dependency. -->
+  <ItemGroup>
+    <Compile Include="../../tools/Anaphora.CaptureProbe/Png.cs" Link="Png.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../profiles/endfield.json" Link="profiles/endfield.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="fixtures/*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

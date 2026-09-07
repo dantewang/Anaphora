@@ -105,6 +105,21 @@ public readonly record struct NormalizedRect(double X, double Y, double Width, d
         return new NormalizedRect(X, Y + (row * index) + rowInset, Width, row - (2 * rowInset));
     }
 
+    /// <summary>
+    /// The part of this rectangle between two fractions along an axis.
+    /// Slice(0.8, 1, Horizontal) is the right-hand fifth.
+    /// </summary>
+    public NormalizedRect Slice(double start, double end, Axis axis)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(start);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(end, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(start, end);
+
+        return axis == Axis.Horizontal
+            ? new NormalizedRect(X + (Width * start), Y, Width * (end - start), Height)
+            : new NormalizedRect(X, Y + (Height * start), Width, Height * (end - start));
+    }
+
     /// <summary>Shrinks towards the centre by a fraction of each side.</summary>
     public NormalizedRect Inset(double fraction)
     {

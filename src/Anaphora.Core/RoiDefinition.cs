@@ -44,6 +44,18 @@ public sealed record SegmentedBarRoi : RoiDefinition
     /// <summary>The colour a complete segment shows.</summary>
     public required ColourGate Filled { get; init; }
 
+    /// <summary>
+    /// The share of each segment, measured from the end it fills towards, that is
+    /// actually sampled.
+    ///
+    /// Sampling the whole segment makes coverage proportional to how full it is,
+    /// which puts "complete" and "nearly complete" a few percent apart and leaves
+    /// no room for an effect sweeping past. Watching only the far end turns the
+    /// same question into a crisp one: the last stretch is lit or it is not.
+    /// Segments are assumed to fill along the axis in the positive direction.
+    /// </summary>
+    public double TailFraction { get; init; } = 0.2;
+
     /// <summary>Fraction of a segment's sampled pixels that must pass before it counts.</summary>
     public double FilledCoverage { get; init; } = 0.6;
 }
@@ -105,17 +117,31 @@ public sealed record PortraitSlotRoi : RoiDefinition
 
 /// <summary>
 /// Not a reading in its own right: a patch that says whether the HUD is on
-/// screen at all.
+/// screen at all. Every other ROI's output is meaningless unless this passes.
 ///
-/// The frame is unreadable in three situations -- out of combat, during a
-/// full-screen ultimate cut-in, and behind a chain cut-in -- and in all three
-/// the HUD is absent rather than dimmed. Every other ROI's output is meaningless
-/// unless this one passes.
+/// The test is two-sided -- the patch must be partly dark and partly not --
+/// because a HUD widget always shows both at once, a track against its borders
+/// and fill, while everything that replaces it is locally uniform. Measured over
+/// the skill-point bar on the captured frames: in combat 17-42% of the patch is
+/// dark and the rest is not, whereas a full-screen ultimate cut-in reads 100%
+/// lit, a menu 100% dark, and the reward screen 72% lit with no dark at all.
+///
+/// Matching a signature colour instead would fail on exactly the frames that
+/// matter: the cut-in that washes the strip white looks far more like a lit HUD
+/// than an empty bar does.
 /// </summary>
 public sealed record PresenceRoi : RoiDefinition
 {
-    public required ColourGate Signature { get; init; }
+    /// <summary>At or below this luma, 0..255, a pixel counts as background.</summary>
+    public double DarkLuma { get; init; } = 40;
 
-    /// <summary>Fraction of sampled pixels that must match before the HUD counts as present.</summary>
-    public double MinimumCoverage { get; init; } = 0.02;
+    /// <summary>Fraction of the patch that must be dark.</summary>
+    public double MinimumDark { get; init; } = 0.08;
+
+    /// <summary>
+    /// Fraction of the patch that must not be dark. Deliberately low: with no
+    /// skill points banked the only thing left lit is the segment borders, which
+    /// measure around luma 63 -- present, but nowhere near a fill.
+    /// </summary>
+    public double MinimumLit { get; init; } = 0.10;
 }
