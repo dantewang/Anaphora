@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -81,6 +82,68 @@ internal sealed class WgcSession : IDisposable
         }
 
         return new WgcSession(device, context, item, framePool, session);
+    }
+
+    /// <summary>
+    /// Opens a session, reads back the first frame that arrives and tears the
+    /// session down again. Null if nothing arrived within the timeout.
+    /// </summary>
+    public static Frame? CaptureOne(IntPtr hwnd, TimeSpan timeout)
+    {
+        using WgcSession capture = Create(hwnd, suppressBorder: true);
+
+        Frame? result = null;
+        Exception? failure = null;
+        int taken = 0;
+        using var done = new ManualResetEventSlim(false);
+
+        capture.Start(pool =>
+        {
+            try
+            {
+                using Direct3D11CaptureFrame? frame = pool.TryGetNextFrame();
+                if (frame is null || Interlocked.Exchange(ref taken, 1) == 1)
+                {
+                    return;
+                }
+
+                try
+                {
+                    result = capture.ReadBack(frame);
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                }
+                finally
+                {
+                    done.Set();
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // A late frame racing the teardown below. Nothing to do.
+            }
+        });
+
+        if (!done.Wait(timeout))
+        {
+            if (Interlocked.Exchange(ref taken, 1) == 0)
+            {
+                return null;
+            }
+
+            // A readback started right at the deadline; let it finish before the
+            // device goes away underneath it.
+            done.Wait(timeout);
+        }
+
+        if (failure is not null)
+        {
+            ExceptionDispatchInfo.Throw(failure);
+        }
+
+        return result;
     }
 
     public void Start(TypedEventHandlerShim onFrame)

@@ -70,3 +70,5 @@ $RECYCLE.BIN/
 captures/
 scratch/
 *.local.json
+# Address and token of the capture server on the gaming machine (tools/remote.sh).
+*.local.env

@@ -314,7 +314,44 @@ dotnet run --project tools/Anaphora.CaptureProbe -- sample captures/combat/frame
 # 把整帧里除指定矩形外全部涂黑，尺寸不变。用来做能进仓库的测试素材：
 # 归一化坐标不用改，4K 全黑 PNG 只有 200–400KB（原图 15MB）。
 dotnet run --project tools/Anaphora.CaptureProbe -- mask captures/combat/frame-036.png out.png 1590,1943,660,37 80,1962,880,26
+
+# 在游戏机上把抓取做成 HTTP 服务。参数：进程名、端口（默认 8750）、burst 落盘目录
+# （默认 captures/remote）。游戏不必先开着，窗口每次请求时重新查找。
+dotnet run --project tools/Anaphora.CaptureProbe -- serve Endfield 8750
+
+# 在开发机上调用它（见下节「跨机器开发」）。所有端点都接受 ?process= 换目标窗口。
+tools/remote.sh "/info?measure=3"                                       # 窗口/DPI/affinity，measure 顺带数 N 秒帧率
+tools/remote.sh "/frame?x=1596&y=1949&w=648&h=26" -o captures/live/sp.png  # 原分辨率裁好再传；带小数点按比例
+tools/remote.sh "/frame?down=3" -o captures/live/preview.png            # 整帧缩到 1280 宽
+tools/remote.sh "/burst?duration=20&interval=500&leadin=5&full=1" -X POST | tar -x -C captures/live/b1
 ```
+
+## 跨机器开发（游戏机 ≠ 开发机）
+
+开发机没有独显、跑不动游戏。**只有"抓一帧"必须发生在游戏机上**；`crop` / `montage` /
+`sample` / `mask` 和单元测试都只吃 PNG，本来就在开发机上跑。所以游戏机上跑
+`CaptureProbe serve`，开发机用 `tools/remote.sh`（curl 的薄封装）拉图进 `captures/live/`，
+再用现有命令量数。
+
+- **`serve` 必须从游戏机已登录的桌面启动**（双击或它自己的终端）。经 SSH / 服务起的进程
+  在别的 session，看不到游戏窗口，WGC 拿不到帧。session 0 会直接拒绝启动。
+- 鉴权：Bearer token，首次启动生成并存到游戏机的 `%LOCALAPPDATA%\Anaphora\probe-token.txt`，
+  之后复用；环境变量 `ANAPHORA_TOKEN` 优先。只应答 loopback、RFC1918、链路本地和
+  Tailscale（100.64/10、ULA）的对端。明文 HTTP，局域网内 token 可被嗅探，走 Tailscale 则加密。
+- 开发机的地址与 token 写在仓库根的 `remote.local.env`（已 gitignore），
+  `serve` 启动时会把这两行原样打出来；环境变量同名时覆盖文件。
+- 首次监听会弹 Windows 防火墙，要允许"专用网络"。网络被识别为"公用"时要改成专用。
+- `/frame` 每次新开一个 WGC 会话、取第一帧、关掉，约 70ms（不含编码）。静态窗口也会立刻给
+  第一帧，所以游戏暂停时 `/frame` 不会挂起；但 `burst` 只在内容变化时出帧，暂停的游戏几乎
+  攒不到帧。
+- 同一时刻只有一个抓取：burst 期间 `/frame` 等 5 秒后返回 409。burst 的 PNG 在游戏机上
+  也留一份，传输断了可以去那边拿，也要记得定期清。
+- 部署：游戏机 clone 仓库直接 `dotnet run`，或
+  `dotnet publish tools/Anaphora.CaptureProbe -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish`
+  出一个约 130MB 的单文件 exe 拷过去（已验证 WGC 在单文件模式下正常）。
+- overlay 的端到端测试、alt-tab / 切分辨率的稳定性测试只能在游戏机上做。
+- **不要用串流（Moonlight / Parsec / Steam）的画面标定阈值**：视频压缩会改颜色、通常也不是
+  4K，而连携条颜色门在 0.365 这种边界上就会判错。串流只适合看布局。
 
 脚手架阶段 `Anaphora.App` 是 `WinExe` 但还没有入口点，`dotnet build` 会以 CS5001
 失败；其余五个项目编译干净。写下第一个 `Program.cs` 后即恢复正常。

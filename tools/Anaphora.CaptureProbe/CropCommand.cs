@@ -61,7 +61,7 @@ internal static class CropCommand
         return 0;
     }
 
-    private static int Coord(string value, int extent, bool normalised)
+    internal static int Coord(string value, int extent, bool normalised)
     {
         double parsed = double.Parse(value, CultureInfo.InvariantCulture);
         return normalised && parsed <= 1.0 ? (int)Math.Round(parsed * extent) : (int)Math.Round(parsed);

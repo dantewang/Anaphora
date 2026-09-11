@@ -15,6 +15,11 @@ internal static class Png
     public static void WriteBgra(string path, byte[] bgra, int width, int height, int stride)
     {
         using var file = File.Create(path);
+        WriteBgra(file, bgra, width, height, stride);
+    }
+
+    public static void WriteBgra(Stream file, byte[] bgra, int width, int height, int stride)
+    {
         file.Write([137, 80, 78, 71, 13, 10, 26, 10]);
 
         Span<byte> header = stackalloc byte[13];

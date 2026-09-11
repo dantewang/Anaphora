@@ -12,6 +12,12 @@
     <RootNamespace>Anaphora.CaptureProbe</RootNamespace>
   </PropertyGroup>
 
+  <!-- Kestrel for the serve verb. A shared framework, not a package: no version to
+       pin, and unlike HttpListener it binds non-loopback without a URL ACL. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Vortice.Direct3D11" />
     <PackageReference Include="Vortice.DXGI" />

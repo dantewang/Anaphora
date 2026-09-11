@@ -51,6 +51,12 @@ internal static class Native
     [DllImport("user32.dll")]
     internal static extern uint GetDpiForWindow(IntPtr hwnd);
 
+    [DllImport("user32.dll")]
+    internal static extern bool IsIconic(IntPtr hwnd);
+
+    [DllImport("kernel32.dll")]
+    internal static extern uint WTSGetActiveConsoleSessionId();
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     internal static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int count);
 
