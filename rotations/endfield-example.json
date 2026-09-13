@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "endfield-example",
+  "displayName": "示例队伍（captures/combat）",
+  "profileId": "endfield",
+  "controlledSlot": 1,
+  "notes": "用户给出的示例轴。第二轮与第一轮按键相同，区别只在 1重击 的前置条件；这是根据用户描述的推断，第二轮如果还有别的差异需要补上。",
+  "opening": [
+    "3",
+    "2",
+    "4E",
+    "1重击",
+    "1E",
+    "1",
+    "2E",
+    "1"
+  ],
+  "cycle": [
+    "3",
+    "2",
+    "4E",
+    { "do": "1重击", "when": ["sp>=1"], "note": "等 2 可放再重击" },
+    "1E",
+    "1",
+    "2E",
+    "1"
+  ]
+}

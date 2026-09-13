@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <None Include="../../profiles/endfield.json" Link="profiles/endfield.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../rotations/*.json" Link="rotations/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="fixtures/*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
