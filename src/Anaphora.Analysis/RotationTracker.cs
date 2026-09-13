@@ -64,6 +64,12 @@ public sealed record RotationState
 
     /// <summary>Things that happened on screen that no nearby step explains -- the player is off the rotation.</summary>
     public IReadOnlyList<Observation> Unexpected { get; init; } = [];
+
+    /// <summary>
+    /// This update moved the cursor to where the player's recent inputs actually
+    /// fit, rather than one step on from where it was.
+    /// </summary>
+    public bool Resynced { get; init; }
 }
 
 public sealed record RotationTrackerOptions
@@ -85,6 +91,12 @@ public sealed record RotationTrackerOptions
     /// cut-in, short enough that a new fight does not inherit the old cursor.
     /// </summary>
     public TimeSpan ResetAfterAbsence { get; init; } = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// How far back observed inputs are remembered when working out where a
+    /// player who has left the rotation has rejoined it.
+    /// </summary>
+    public TimeSpan ResyncWindow { get; init; } = TimeSpan.FromSeconds(12);
 }
 
 /// <summary>
@@ -104,11 +116,22 @@ public sealed record RotationTrackerOptions
 /// Known blind spot: a skill that costs less than a whole segment does not
 /// change the whole-segment count, so it goes unseen until a later chain or
 /// ultimate pulls the cursor past it.
+///
+/// When the player leaves the rotation and starts over mid-fight, stepping
+/// forward from the old cursor can never catch up. So whenever something
+/// happens that no nearby step explains, the recent inputs are laid against
+/// every position in the rotation, and the cursor moves to wherever they fit --
+/// provided the fit is long enough and names at least one slot, so a stray
+/// input is not mistaken for a restart.
 /// </summary>
 public sealed class RotationTracker
 {
+    /// <summary>A realignment needs this many consecutive inputs to fit...</summary>
+    private const int ResyncMinimumLength = 3;
+
     private readonly Rotation rotation;
     private readonly RotationTrackerOptions options;
+    private readonly List<(Observation Seen, TimeSpan At)> history = [];
 
     private RotationCursor cursor;
     private HudSnapshot? baseline;
@@ -152,6 +175,7 @@ public sealed class RotationTracker
         {
             cursor = Start;
             baseline = null;
+            history.Clear();
         }
 
         everPresent = true;
@@ -159,10 +183,18 @@ public sealed class RotationTracker
 
         var completed = new List<RotationAction>();
         var unexpected = new List<Observation>();
+        bool resynced = false;
 
         if (baseline is not null)
         {
             var pending = Diff(baseline, snapshot);
+
+            foreach (Observation seen in pending)
+            {
+                history.Add((seen, timestamp));
+            }
+
+            history.RemoveAll(entry => timestamp - entry.At > options.ResyncWindow);
 
             // Match whatever can be matched, in whichever order the steps want
             // them: two things seen in the same frame need not have happened in
@@ -183,10 +215,15 @@ public sealed class RotationTracker
             }
 
             unexpected.AddRange(pending);
+
+            if (unexpected.Count > 0)
+            {
+                resynced = TryResync();
+            }
         }
 
         baseline = snapshot;
-        State = Describe(snapshot, stale: false, completed, unexpected);
+        State = Describe(snapshot, stale: false, completed, unexpected) with { Resynced = resynced };
         return State;
     }
 
@@ -195,7 +232,132 @@ public sealed class RotationTracker
     {
         cursor = Start;
         baseline = null;
+        history.Clear();
         State = Describe(null, stale: true, [], []);
+    }
+
+    /// <summary>
+    /// Lays the remembered inputs against every position and moves the cursor to
+    /// the best fit. Longer fits win; on a tie the current position wins (so a
+    /// player who is actually on track is never moved), then a position in the
+    /// same phase, then the earliest -- which, with an invisible heavy attack
+    /// right after the last matched input, keeps the heavy attack as the step to
+    /// do rather than skipping it.
+    /// </summary>
+    private bool TryResync()
+    {
+        RotationCursor? best = null;
+        int bestLength = 0;
+
+        foreach (RotationCursor candidate in Candidates())
+        {
+            (int length, bool named) = FitLength(candidate);
+            if (length < ResyncMinimumLength || !named)
+            {
+                continue;
+            }
+
+            bool better = best is not RotationCursor current
+                || length > bestLength
+                || (length == bestLength && Rank(candidate) < Rank(current));
+
+            if (better)
+            {
+                best = candidate;
+                bestLength = length;
+            }
+        }
+
+        if (best is not RotationCursor target || (target.Phase == cursor.Phase && target.Index == cursor.Index))
+        {
+            return false;
+        }
+
+        int round = target.Phase switch
+        {
+            RotationPhase.Opening => 1,
+            _ when cursor.Phase == RotationPhase.Cycle => target.Index <= cursor.Index ? cursor.Round + 1 : cursor.Round,
+            _ => rotation.Opening.Count > 0 ? 2 : 1,
+        };
+
+        cursor = target with { Round = round };
+        history.Clear();
+        return true;
+
+        // Lower is preferred.
+        int Rank(RotationCursor c) =>
+            c.Phase == cursor.Phase && c.Index == cursor.Index ? 0 : c.Phase == cursor.Phase ? 1 : 2;
+    }
+
+    private IEnumerable<RotationCursor> Candidates()
+    {
+        for (int i = 0; i < rotation.Opening.Count; i++)
+        {
+            yield return new RotationCursor(RotationPhase.Opening, 1, i);
+        }
+
+        for (int i = 0; i < rotation.Cycle.Count; i++)
+        {
+            yield return new RotationCursor(RotationPhase.Cycle, 0, i);
+        }
+    }
+
+    /// <summary>
+    /// How many of the most recent inputs, newest first, are exactly the steps
+    /// leading up to <paramref name="candidate"/> -- heavy attacks skipped, since
+    /// they leave nothing to match -- and whether any of them named a slot.
+    /// </summary>
+    private (int Length, bool Named) FitLength(RotationCursor candidate)
+    {
+        int newest = history.Count - 1;
+        int length = 0;
+        bool named = false;
+        RotationCursor at = candidate;
+
+        for (int guard = 0; newest >= 0 && guard < 64; guard++)
+        {
+            if (!Retreat(at, out at))
+            {
+                break;
+            }
+
+            RotationAction action = StepAt(at).Action;
+            if (action.Kind == ActionKind.Heavy)
+            {
+                continue;
+            }
+
+            Observation seen = history[newest].Seen;
+            if (!Explains(action, seen))
+            {
+                break;
+            }
+
+            length++;
+            named |= seen.Kind != ObservedKind.SkillSpent;
+            newest--;
+        }
+
+        return (length, named);
+    }
+
+    /// <summary>The step before. The cycle runs back into its previous round; the opening starts the fight.</summary>
+    private bool Retreat(RotationCursor current, out RotationCursor previous)
+    {
+        if (current.Index > 0)
+        {
+            previous = current with { Index = current.Index - 1 };
+            return true;
+        }
+
+        if (current.Phase == RotationPhase.Cycle && rotation.Cycle.Count > 0)
+        {
+            previous = current with { Index = rotation.Cycle.Count - 1 };
+            return true;
+        }
+
+        previous = current;
+        return false;
     }
 
     /// <summary>Moves past the current step by hand -- for a step the HUD cannot confirm.</summary>

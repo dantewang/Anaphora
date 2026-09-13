@@ -166,6 +166,74 @@ public class RotationTrackerTests
     }
 
     [Fact]
+    public void StartingOverMidFightIsPickedUp()
+    {
+        // The user's report: off the rotation, then back to the top without
+        // leaving the fight. Stepping forward from the old cursor never catches
+        // up; the tracker has to notice where the inputs fit.
+        var tracker = new RotationTracker(Example);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud with { Sp = 2 });                                 // 3
+        See(tracker, hud with { Sp = 1 });                                 // 2
+        See(tracker, hud with { Sp = 1, Chain4 = false });                 // 4E
+        See(tracker, hud with { Sp = 1, Chain4 = false, Chain1 = false }); // 1重击 1E
+        See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false }); // 1
+        Assert.Equal("2E", Now(tracker));
+
+        // Lost the plot: start over with 3, 2, 4E while 2E is still expected.
+        See(tracker, hud with { Sp = 3, Chain4 = true, Chain1 = false });  // points and 4's chain came back
+        See(tracker, hud with { Sp = 2, Chain1 = false });                 // 3 -- unexplained
+        See(tracker, hud with { Sp = 1, Chain1 = false });                 // 2 -- unexplained
+        Assert.Equal("2E", Now(tracker));
+        Assert.False(tracker.State.Resynced);
+
+        RotationState state = See(tracker, hud with { Sp = 1, Chain1 = false, Chain4 = false }); // 4E
+
+        Assert.True(state.Resynced);
+        Assert.Equal("1重击", Now(tracker));
+        Assert.Equal(RotationPhase.Cycle, state.Cursor.Phase);
+    }
+
+    [Fact]
+    public void TwoFittingInputsAreNotEnoughToRealign()
+    {
+        // 3 then 2E fits "…1, 2E" -- but two inputs are too little evidence to
+        // throw the cursor across the rotation.
+        var tracker = new RotationTracker(Example);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud with { Sp = 2 });
+        RotationState state = See(tracker, hud with { Sp = 2, Chain2 = false });
+
+        Assert.False(state.Resynced);
+        Assert.Equal("2", Now(tracker));
+    }
+
+    [Fact]
+    public void APlayerWhoIsOnTrackIsNeverMoved()
+    {
+        // Following the rotation exactly produces no realignments at all.
+        var tracker = new RotationTracker(Example);
+        var hud = new Hud(3);
+
+        var states = new List<RotationState>
+        {
+            See(tracker, hud),
+            See(tracker, hud with { Sp = 2 }),
+            See(tracker, hud with { Sp = 1 }),
+            See(tracker, hud with { Sp = 1, Chain4 = false }),
+            See(tracker, hud with { Sp = 1, Chain4 = false, Chain1 = false }),
+            See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false }),
+            See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false, Chain2 = false }),
+        };
+
+        Assert.DoesNotContain(states, s => s.Resynced);
+    }
+
+    [Fact]
     public void SkipMovesPastAStepByHand()
     {
         var tracker = new RotationTracker(Example);

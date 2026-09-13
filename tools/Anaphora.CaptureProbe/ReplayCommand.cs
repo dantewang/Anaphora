@@ -59,6 +59,11 @@ internal static class ReplayCommand
                 line.Append(" BLOCKED");
             }
 
+            if (state.Resynced)
+            {
+                line.Append(" REALIGNED");
+            }
+
             if (state.Completed.Count > 0)
             {
                 line.Append(CultureInfo.InvariantCulture, $"  done {string.Join(" ", state.Completed)}");

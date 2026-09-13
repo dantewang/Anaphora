@@ -206,6 +206,11 @@ internal sealed class AnaphoraHost : IDisposable
             Log.Write($"off rotation at {state.Cursor}: {surprise}");
         }
 
+        if (state.Resynced)
+        {
+            Log.Write($"realigned to {state.Cursor}: now {state.Current.Step.Action}");
+        }
+
         Volatile.Write(ref pending, new Pending(hud, state, now - lastReadable));
         if (Interlocked.Exchange(ref posted, 1) == 0)
         {
