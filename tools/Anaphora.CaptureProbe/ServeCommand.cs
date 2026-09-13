@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Anaphora.Core;
 using Windows.Graphics.Capture;
 
 namespace Anaphora.CaptureProbe;
@@ -32,6 +33,10 @@ namespace Anaphora.CaptureProbe;
 /// <c>GET /frame</c>           one PNG; <c>?x&amp;y&amp;w&amp;h</c> crops at native resolution
 ///                             before sending (pixels, or fractions if written with a
 ///                             decimal point), <c>?down=N</c> box-downscales after
+/// <c>GET /hud</c>             the production pipeline against the game for
+///                             <c>?seconds</c> at <c>?rate</c> Hz; a timeline of reading
+///                             changes, rates, and with <c>?verify=N</c> a byte-for-byte
+///                             check of every Nth GPU atlas against a CPU copy
 /// <c>POST /burst</c>          runs burst here, answers with a tar of the result;
 ///                             <c>?duration&amp;interval&amp;leadin&amp;full</c> as on the CLI
 ///
@@ -70,6 +75,7 @@ internal static class ServeCommand
         app.MapGet("/info", server.Info);
         app.MapGet("/frame", server.Frame);
         app.MapPost("/burst", server.Burst);
+        app.MapGet("/hud", server.Hud);
 
         Console.WriteLine($"serving        : '{processName}' on port {port}");
         Console.WriteLine($"session        : {session} (console session {consoleSession})");
@@ -408,6 +414,67 @@ internal static class ServeCommand
                 body => TarFile.CreateFromDirectoryAsync(directory, body, includeBaseDirectory: false),
                 "application/x-tar",
                 $"{Path.GetFileName(directory)}.tar");
+        }
+
+        /// <summary>
+        /// The production pipeline against the live game: what it read, as a
+        /// timeline of changes, plus rates and verification counts.
+        /// </summary>
+        public IResult Hud(HttpRequest request)
+        {
+            int seconds = QueryInt(request, "seconds") ?? 10;
+            int rate = QueryInt(request, "rate") ?? 20;
+            int verify = QueryInt(request, "verify") ?? 0;
+
+            if (seconds is < 1 or > 300 || rate is < 1 or > 120 || verify < 0)
+            {
+                return Text(StatusCodes.Status400BadRequest, "seconds 1..300, rate 1..120, verify >= 0.");
+            }
+
+            GameProfile profile;
+            try
+            {
+                profile = HudCommand.LoadProfile(null);
+            }
+            catch (Exception ex) when (ex is IOException or JsonException)
+            {
+                return Text(StatusCodes.Status500InternalServerError, $"cannot load the profile: {ex.Message}");
+            }
+
+            if (!captureGate.Wait(0))
+            {
+                return Busy();
+            }
+
+            HudRun run;
+            try
+            {
+                if (!TryFindWindow(request, out GameWindow? window, out IResult? problem))
+                {
+                    return problem;
+                }
+
+                run = HudCommand.Capture(window.Handle, profile, TimeSpan.FromSeconds(seconds), rate, verify, log: null);
+            }
+            finally
+            {
+                captureGate.Release();
+            }
+
+            Console.WriteLine(run.Summary());
+            return Results.Json(
+                new
+                {
+                    profile = profile.Id,
+                    seconds = Math.Round(run.Seconds, 2),
+                    run.Stats,
+                    run.Snapshots,
+                    hudPresent = run.Present,
+                    run.Closed,
+                    failure = run.Failure?.ToString(),
+                    timeline = run.Timeline,
+                },
+                Json);
         }
 
         private string ProcessName(HttpRequest request)

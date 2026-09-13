@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Windows.Graphics.Capture session, D3D11 device, the ROI-atlas shader pass and
-       the single staging readback per frame. -->
+  <!-- Windows.Graphics.Capture session, D3D11 device, the GPU-side ROI atlas copy
+       and the single staging readback per frame. -->
   <PropertyGroup>
     <TargetFramework>$(AnaphoraWindowsTargetFramework)</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Anaphora.Analysis/Anaphora.Analysis.csproj" />
     <ProjectReference Include="../Anaphora.Core/Anaphora.Core.csproj" />
   </ItemGroup>
 

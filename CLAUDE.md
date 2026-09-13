@@ -46,7 +46,7 @@ API 稳定，而 Rust 侧的 `windows` / `winit` / `egui` crate 破坏性更新�
 ```
 src/Anaphora.Core       profile 模型、ROI 定义、序列化。无 Windows / UI 依赖
 src/Anaphora.Analysis   纯 CPU 的读数器：条填充率、图标状态、头像匹配。可单测
-src/Anaphora.Capture    WGC 会话、D3D11 设备、ROI 图集 shader、staging 读回
+src/Anaphora.Capture    WGC 会话、客户区定位、限帧丢帧、GPU 上的 ROI 图集拷贝与 staging 读回
 src/Anaphora.Overlay    Avalonia 透明置顶穿透窗口，跟随游戏窗口
 src/Anaphora.App        入口 + 配置界面（选窗口、标 ROI、调阈值、实时预览）
 tests/Anaphora.Analysis.Tests
@@ -112,8 +112,27 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
 - WGC 帧按游戏 present 速率推送，**没有内建限帧**。处理不过来时在 `FrameArrived` 里
   立即 `Dispose` 丢帧，不要排队。新版 Windows 上可探测
   `GraphicsCaptureSession.MinUpdateInterval` 直接限速。目标更新率 15–30 Hz。
-- **全程不把整帧下到 CPU**：一个 pixel shader 把所有 ROI 打包进一张小图集
-  （约 256×256），一次 `CopyResource` 到 staging，每帧只 Map 一次。
+- **全程不把整帧下到 CPU**：每个 ROI 一次 `CopySubresourceRegion`，直接从捕获纹理
+  拷进一张小 staging 纹理（`RoiAtlas` 负责排布），每帧只 Map 一次。**不用 shader**：
+  原生分辨率的纯拷贝不需要 HLSL 工具链，也没有采样滤波要操心；原计划的 256×256
+  也放不下 648 宽的技能点条，图集按内容定尺寸。4K 下实测 648×192（整帧 1.5%），
+  每帧处理约 1ms。
+- **读数器不知道图集的存在**：`FrameView` 带原点偏移，每个 ROI 通过一个"坐标重定向"
+  的视图去读自己的槽位，客户区坐标原样使用。没有把 ROI 重映射到图集坐标系，所以不会
+  出现第二次边缘取整和第一次不一致——图集读数与整帧读数逐位相同，8 帧 fixture 上有测试
+  强制这一点。窗口化游戏的标题栏/边框偏移走的是同一个机制（`FrameView.ClientArea`）。
+- 客户区在捕获纹理里的位置 = `ClientToScreen(0,0)` 减 `DWMWA_EXTENDED_FRAME_BOUNDS`
+  左上角。WGC 窗口捕获覆盖的是 DWM 扩展边框，**不是** `GetWindowRect`（后者含不可见的
+  缩放边框）。
+- `CaptureSession` 在进程不是 PerMonitorV2 时直接抛异常，不静默出错。
+- 限帧：`nextDue += interval` 按整数个间隔推进（不是从"现在"起算），长期速率才是设定值
+  而不是游戏帧时间的某个倍数；卡顿后重新对齐而不是连发补帧。支持时同时设
+  `MinUpdateInterval = 0.9 × interval`，让系统先挡掉大部分帧。
+- `CaptureOptions.VerifyEvery`：每 N 帧额外整帧读回一次，在 CPU 上重建图集逐字节比对
+  GPU 结果。诊断用，**任何窗口都能跑，不需要游戏**。开发机上对 Claude 窗口实测 151/151 一致。
+- COM/WinRT 桥（`IGraphicsCaptureItemInterop` 等）在 Capture 里仍是手写的，没用 CsWin32：
+  这几个接口要从 CsWinRT 投影对象上转型，正是 CsWin32 的 COM 输出和 CsWinRT 封送打架的
+  地方，而手写版本已在游戏上验证过。普通 Win32 函数走 CsWin32。
 - 用 `Direct3D11CaptureFramePool.CreateFreeThreaded`，格式 `B8G8R8A8UIntNormalized`，
   2 个 buffer，在自己的线程处理。
 - ROI 坐标存成相对游戏客户区的归一化值，换分辨率不用重标。
@@ -148,6 +167,10 @@ Unity 引擎。测试环境为无边框窗口 3840×2160，4K 显示器 + Window
   给队伍四人算 dHash。
 - **技能点归零时的哨兵行为仍未验证**。现在的双侧对比判据在理论上成立（轨道提供暗、
   边框提供非暗），但连拍里技能点从没归零过，没有实拍样本。
+- **生产管线还没在游戏上跑过**。开发机上用 `hud` 对普通窗口验证了 GPU 图集与限帧，
+  但真实 4K 游戏、战斗中的读数时间线要在游戏机上跑 `/hud`。
+- **窗口化模式的客户区偏移没实测过**。算法和测试都覆盖了（fixture 贴进带边框的画布），
+  但 DWM 边框的实际数值只有游戏切到窗口模式才能验证。
 - 长时间运行下的稳定性：游戏切分辨率 / alt-tab / 显示器切换时 `GraphicsCaptureItem`
   的 `Closed` 与帧池重建路径都还没测。
 
@@ -324,6 +347,11 @@ tools/remote.sh "/info?measure=3"                                       # 窗口
 tools/remote.sh "/frame?x=1596&y=1949&w=648&h=26" -o captures/live/sp.png  # 原分辨率裁好再传；带小数点按比例
 tools/remote.sh "/frame?down=3" -o captures/live/preview.png            # 整帧缩到 1280 宽
 tools/remote.sh "/burst?duration=20&interval=500&leadin=5&full=1" -X POST | tar -x -C captures/live/b1
+tools/remote.sh "/hud?seconds=30&rate=20&verify=20"                     # 生产管线读实时游戏：读数变化时间线 + 速率 + 图集校验
+
+# 本地跑生产管线（Anaphora.Capture + Analysis）。参数：进程名、秒数、Hz、每 N 帧校验一次图集
+# （0 关闭）、profile 路径（默认 profiles/endfield.json）。只有读数变化时才打一行。
+dotnet run --project tools/Anaphora.CaptureProbe -- hud Endfield 30 20 20
 ```
 
 ## 跨机器开发（游戏机 ≠ 开发机）

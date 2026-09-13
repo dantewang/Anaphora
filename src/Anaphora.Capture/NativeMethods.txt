@@ -2,3 +2,16 @@
 // generator emits bindings for exactly what is listed here and nothing else.
 // Names must match the Win32 metadata exactly, so add entries as they are
 // needed rather than speculatively -- an unknown name is a build warning.
+
+// Where the client area sits inside a window capture.
+GetClientRect
+ClientToScreen
+DwmGetWindowAttribute
+GetWindowRect
+IsWindow
+IsIconic
+
+// The per-monitor-v2 check. Without it GetClientRect reports logical pixels
+// and every ROI lands in the wrong place on a scaled display.
+GetThreadDpiAwarenessContext
+AreDpiAwarenessContextsEqual

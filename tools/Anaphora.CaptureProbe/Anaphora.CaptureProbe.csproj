@@ -18,6 +18,16 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- The hud verb drives the production pipeline; everything else here keeps its
+       own hand-rolled capture path so a regression in one cannot hide in the other. -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/Anaphora.Capture/Anaphora.Capture.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../profiles/*.json" Link="profiles/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Vortice.Direct3D11" />
     <PackageReference Include="Vortice.DXGI" />
