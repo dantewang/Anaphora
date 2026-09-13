@@ -90,11 +90,11 @@ public sealed class HudReader
         PresenceReading presence;
         if (sentinel is null)
         {
-            presence = new PresenceReading(true, 0, 0);
+            presence = new PresenceReading(true, 0, 0, 0);
         }
         else if (!View(frame, atlas, sentinel, out FrameView sentinelView))
         {
-            presence = new PresenceReading(false, 0, 0);
+            presence = new PresenceReading(false, 0, 0, 0);
         }
         else
         {

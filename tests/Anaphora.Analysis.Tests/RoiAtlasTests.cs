@@ -112,21 +112,28 @@ public class RoiAtlasTests
     }
 
     [Fact]
-    public void ARoiOffTheTextureReadsAsNothingRatherThanThrowing()
+    public void ARoiOffTheFrameReadsAsNothingRatherThanThrowing()
     {
-        // A client area smaller than expected, e.g. mid-resize: the ultimate row
-        // falls outside the texture entirely.
+        // A hand-edited profile nudges the ultimate row past the right edge. The
+        // validator flags it; the pipeline must still not walk off the atlas.
+        GameProfile nudged = Fixture.Profile with
+        {
+            Rois =
+            [
+                .. Fixture.Profile.Rois.Select(roi => roi is DiscStateRoi disc
+                    ? disc with { Bounds = disc.Bounds with { X = 1.05 } }
+                    : roi),
+            ],
+        };
+
         byte[] pixels = Fixture.Load("036", out int width, out int height);
-        var reader = new HudReader(Fixture.Profile);
-        var clipped = new PixelRect(0, 0, width, height);
+        RoiAtlas atlas = RoiAtlas.Create(nudged, width, height, new PixelRect(0, 0, width, height));
+        byte[] packed = Pack(atlas, pixels, width * 4);
 
-        RoiAtlas atlas = RoiAtlas.Create(Fixture.Profile, 3000, height, clipped);
-        byte[] packed = new byte[atlas.Width * atlas.Height * 4];
-        atlas.CopyFrom(pixels, width * 4, packed);
-
-        HudSnapshot snapshot = reader.Read(new FrameView(packed, atlas.Width, atlas.Height), atlas);
+        HudSnapshot snapshot = new HudReader(nudged).Read(new FrameView(packed, atlas.Width, atlas.Height), atlas);
 
         Assert.True(snapshot.HudPresent);
+        Assert.Equal(4, snapshot.Ultimates.Count);
         Assert.All(snapshot.Ultimates, u => Assert.False(u.IsReady));
     }
 

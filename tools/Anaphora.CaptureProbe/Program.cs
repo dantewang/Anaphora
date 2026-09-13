@@ -25,7 +25,7 @@ internal static class Program
         // The verb is optional so the original "probe <process> <dir>" form still works.
         string verb = "probe";
         int offset = 0;
-        if (args.Length > 0 && args[0] is "probe" or "burst" or "serve" or "hud" or "crop" or "montage" or "sample" or "mask")
+        if (args.Length > 0 && args[0] is "probe" or "burst" or "serve" or "hud" or "replay" or "radial" or "hash" or "crop" or "montage" or "sample" or "mask")
         {
             verb = args[0];
             offset = 1;
@@ -63,6 +63,21 @@ internal static class Program
         if (verb == "hud")
         {
             return HudCommand.Run(rest);
+        }
+
+        if (verb == "replay")
+        {
+            return ReplayCommand.Run(rest);
+        }
+
+        if (verb == "radial")
+        {
+            return RadialCommand.Run(rest);
+        }
+
+        if (verb == "hash")
+        {
+            return HashCommand.Run(rest);
         }
 
         string processName = rest.Length > 0 ? rest[0] : "Endfield";

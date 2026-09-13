@@ -188,20 +188,39 @@ public class SyntheticReaderTests
         Assert.Equal(0.30, RoiReader.Read(rightToLeft, new FrameView(pixels, Width, Height)).Ratio, 2);
     }
 
-    [Fact]
-    public void DiscStateIgnoresTheChargeArcOnTheRing()
+    private static readonly Rgb ArcOrange = new(0xF7, 0xB2, 0x2E);
+    private static readonly Rgb TintedFloor = new(0x7E, 0x54, 0x33);
+    private static readonly Rgb OrangeStripe = new(0xB4, 0x79, 0x49);
+
+    private static readonly DiscStateRoi Ultimate = new() { Id = "ult", Bounds = new NormalizedRect(0, 0, 1, 1) };
+
+    /// <summary>
+    /// An 88-pixel ultimate slot as Endfield draws it: <paramref name="inside"/>
+    /// fills the translucent disc, <paramref name="outside"/> the rest, a charge
+    /// arc sweeps clockwise from 12 o'clock through <paramref name="charge"/> of
+    /// the circle at r 16-25, and the ready ring at r 39-43 is lit through
+    /// <paramref name="ring"/> of it.
+    /// </summary>
+    private static byte[] Slot(double charge, double ring, Rgb inside, Rgb outside, Rgb arc)
     {
-        // A dark slot with a bright arc around its rim is charging, not ready.
-        const int Side = 72;
+        const int Side = 88;
         byte[] pixels = new byte[Side * Side * 4];
         for (int y = 0; y < Side; y++)
         {
             for (int x = 0; x < Side; x++)
             {
-                double dx = x - 35.5;
-                double dy = y - 35.5;
-                double distance = Math.Sqrt((dx * dx) + (dy * dy));
-                Rgb colour = distance is > 30 and < 36 ? new Rgb(0xA8, 0xC0, 0x00) : new Rgb(0x00, 0x10, 0x18);
+                double dx = x - 43.5;
+                double dy = y - 43.5;
+                double r = Math.Sqrt((dx * dx) + (dy * dy));
+                double turn = (Math.Atan2(dx, -dy) + (2 * Math.PI)) % (2 * Math.PI) / (2 * Math.PI);
+
+                Rgb colour = r switch
+                {
+                    >= 16 and <= 25 when turn < charge => arc,
+                    >= 39 and <= 43 when turn < ring => arc,
+                    < 32 => inside,
+                    _ => outside,
+                };
 
                 int p = (y * Side * 4) + (x * 4);
                 pixels[p] = colour.B;
@@ -211,43 +230,70 @@ public class SyntheticReaderTests
             }
         }
 
-        var roi = new DiscStateRoi
-        {
-            Id = "ult",
-            Bounds = new NormalizedRect(0, 0, 1, 1),
-            InnerRadius = 0.62,
-            ReadyLuma = 100,
-            ReadySaturation = 0,
-        };
+        return pixels;
+    }
 
-        DiscStateReading reading = RoiReader.Read(roi, new FrameView(pixels, Side, Side));
+    [Theory]
+    [InlineData(0.05)]
+    [InlineData(0.40)]
+    [InlineData(0.85)]
+    public void TheChargeArcIsMeasuredClockwiseFromTheTop(double charge)
+    {
+        DiscStateReading reading = RoiReader.Read(Ultimate, new FrameView(Slot(charge, 0, TintedFloor, OrangeStripe, ArcOrange), 88, 88));
 
+        // Spokes are five degrees apart, so the reading is good to about 1/72.
         Assert.False(reading.IsReady);
-        Assert.True(reading.MeanLuma < 40, $"arc leaked into the inner disc: luma {reading.MeanLuma:F1}");
+        Assert.InRange(reading.Charge, charge - 0.03, charge + 0.03);
     }
 
     [Fact]
-    public void DiscStateSeesAFilledSlot()
+    public void AFullyLitOuterRingMeansReady()
     {
-        const int Side = 72;
-        byte[] pixels = new byte[Side * Side * 4];
-        for (int i = 0; i < pixels.Length; i += 4)
-        {
-            pixels[i] = 0x28;
-            pixels[i + 1] = 0x98;
-            pixels[i + 2] = 0xD0;
-            pixels[i + 3] = 255;
-        }
+        DiscStateReading reading = RoiReader.Read(Ultimate, new FrameView(Slot(1, 1, ArcOrange, TintedFloor, ArcOrange), 88, 88));
 
-        var roi = new DiscStateRoi
+        Assert.True(reading.IsReady);
+        Assert.Equal(1, reading.Charge);
+    }
+
+    [Fact]
+    public void ABrightFloorSeenThroughTheDiscIsNotReady()
+    {
+        // The failure the first calibration had on a sunlit map: nothing lit at
+        // all, but the inner disc is bright and orange.
+        DiscStateReading reading = RoiReader.Read(Ultimate, new FrameView(Slot(0, 0, OrangeStripe, OrangeStripe, ArcOrange), 88, 88));
+
+        Assert.False(reading.IsReady);
+        Assert.Equal(0, reading.Charge);
+        Assert.Equal(0, reading.RingCoverage);
+    }
+
+    [Fact]
+    public void SomethingVividCrossingPartOfTheRingIsNotReady()
+    {
+        DiscStateReading reading = RoiReader.Read(Ultimate, new FrameView(Slot(0.6, 0.35, TintedFloor, OrangeStripe, ArcOrange), 88, 88));
+
+        Assert.False(reading.IsReady);
+        Assert.InRange(reading.RingCoverage, 0.3, 0.4);
+    }
+
+    [Fact]
+    public void ASignatureSentinelNeedsItsColourToCoverThePatch()
+    {
+        var roi = new PresenceRoi
         {
-            Id = "ult",
+            Id = "hud",
             Bounds = new NormalizedRect(0, 0, 1, 1),
-            ReadyLuma = 100,
-            ReadySaturation = 0,
+            Signature = new ColourGate(new Rgb(0x12, 0xCC, 0xF9), 0.15),
+            MinimumCoverage = 0.6,
         };
 
-        Assert.True(RoiReader.Read(roi, new FrameView(pixels, Side, Side)).IsReady);
+        byte[] cyan = Fill(new Rgb(0x10, 0xC8, 0xF8));
+        byte[] mostlyGrey = Fill(new Rgb(0x6E, 0x71, 0x77));
+        Paint(mostlyGrey, new PixelRect(0, 0, 60, Height), new Rgb(0x10, 0xC8, 0xF8));
+
+        Assert.True(RoiReader.Read(roi, new FrameView(cyan, Width, Height)).IsPresent);
+        Assert.False(RoiReader.Read(roi, new FrameView(mostlyGrey, Width, Height)).IsPresent);
+        Assert.False(RoiReader.Read(roi, new FrameView(Fill(White), Width, Height)).IsPresent);
     }
 
     [Fact]

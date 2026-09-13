@@ -27,7 +27,13 @@ public static class RoiReader
         PixelRect rect = frame.RectFor(roi.Bounds);
         if (rect.IsEmpty)
         {
-            return new PresenceReading(false, 0, 0);
+            return new PresenceReading(false, 0, 0, 0);
+        }
+
+        if (roi.Signature is ColourGate signature)
+        {
+            double coverage = Coverage(frame, rect, signature);
+            return new PresenceReading(coverage >= roi.MinimumCoverage, coverage, 0, 0);
         }
 
         int dark = 0;
@@ -48,6 +54,7 @@ public static class RoiReader
 
         return new PresenceReading(
             darkFraction >= roi.MinimumDark && litFraction >= roi.MinimumLit,
+            0,
             darkFraction,
             litFraction);
     }
@@ -155,52 +162,89 @@ public static class RoiReader
             return new DiscStateReading(false, 0, 0);
         }
 
-        // Sample a disc, not the bounding box: the corners of the box reach the
-        // ring, where the charge arc lives, and that arc is exactly what must not
-        // influence the verdict.
         double centreX = rect.X + (rect.Width / 2.0) - 0.5;
         double centreY = rect.Y + (rect.Height / 2.0) - 0.5;
-        double radius = Math.Min(rect.Width, rect.Height) / 2.0 * roi.InnerRadius;
-        double radiusSquared = radius * radius;
+        double radius = Math.Min(rect.Width, rect.Height) / 2.0;
 
-        double luma = 0;
-        double saturation = 0;
-        int count = 0;
+        // One spoke every five degrees, starting half a step past 12 o'clock so
+        // the arc's leading edge, which sits exactly on the vertical, is never
+        // sampled edge-on.
+        Span<bool> arc = stackalloc bool[DiscSpokes];
+        int ringLit = 0;
 
-        for (int y = rect.Y; y < rect.Bottom; y++)
+        for (int spoke = 0; spoke < DiscSpokes; spoke++)
         {
-            double dy = y - centreY;
-            for (int x = rect.X; x < rect.Right; x++)
-            {
-                double dx = x - centreX;
-                if ((dx * dx) + (dy * dy) > radiusSquared)
-                {
-                    continue;
-                }
+            double theta = (spoke + 0.5) * (2 * Math.PI / DiscSpokes);
+            double sin = Math.Sin(theta);
+            double cos = Math.Cos(theta);
 
-                Rgb pixel = frame[x, y];
-                luma += pixel.Luma;
-                saturation += pixel.Saturation;
-                count++;
+            arc[spoke] = SpokeLit(frame, rect, centreX, centreY, sin, cos, roi.ArcInner * radius, roi.ArcOuter * radius, roi.ArcLuma, roi.ArcSaturation);
+            if (SpokeLit(frame, rect, centreX, centreY, sin, cos, roi.RingInner * radius, roi.RingOuter * radius, roi.RingLuma, roi.RingSaturation))
+            {
+                ringLit++;
             }
         }
 
-        if (count == 0)
+        double coverage = (double)ringLit / DiscSpokes;
+        bool ready = coverage >= roi.ReadyCoverage;
+
+        // The charge is the unbroken run clockwise from the top. Background that
+        // happens to be vivid somewhere else round the disc is not part of it;
+        // a single unlit spoke is tolerated for anti-aliasing and small overlaps.
+        int reached = 0;
+        int gap = 0;
+        for (int spoke = 0; spoke < DiscSpokes; spoke++)
         {
-            return new DiscStateReading(false, 0, 0);
+            if (arc[spoke])
+            {
+                reached = spoke + 1;
+                gap = 0;
+            }
+            else if (++gap >= 2)
+            {
+                break;
+            }
         }
 
-        double meanLuma = luma / count;
-        double meanSaturation = saturation / count;
+        return new DiscStateReading(ready, ready ? 1 : (double)reached / DiscSpokes, coverage);
+    }
 
-        // The saturation test is opt-in because HSV saturation is meaningless at
-        // low value: an empty slot measured #001018, which is almost black and
-        // still scores 1.0. Endfield's profile leaves it at zero and relies on
-        // luma alone, which separates 182 from 51.
-        bool ready = meanLuma >= roi.ReadyLuma &&
-            (roi.ReadySaturation <= 0 || meanSaturation >= roi.ReadySaturation);
+    private const int DiscSpokes = 72;
 
-        return new DiscStateReading(ready, meanLuma, meanSaturation);
+    /// <summary>True when at least half the pixels along a spoke, between two radii, are vivid enough.</summary>
+    private static bool SpokeLit(
+        in FrameView frame,
+        PixelRect rect,
+        double centreX,
+        double centreY,
+        double sin,
+        double cos,
+        double from,
+        double to,
+        double luma,
+        double saturation)
+    {
+        int hits = 0;
+        int samples = 0;
+
+        for (double r = from; r <= to; r += 1)
+        {
+            int x = (int)Math.Round(centreX + (r * sin));
+            int y = (int)Math.Round(centreY - (r * cos));
+            if (x < rect.X || y < rect.Y || x >= rect.Right || y >= rect.Bottom)
+            {
+                continue;
+            }
+
+            Rgb pixel = frame[x, y];
+            samples++;
+            if (pixel.Luma >= luma && pixel.Saturation >= saturation)
+            {
+                hits++;
+            }
+        }
+
+        return samples > 0 && hits * 2 >= samples;
     }
 
     public static PortraitReading Read(
@@ -216,7 +260,7 @@ public static class RoiReader
         PixelRect rect = frame.RectFor(roi.Bounds.Inset(1 - roi.InnerRadius));
         ulong hash = PerceptualHash.Compute(frame, rect);
 
-        string? bestId = null;
+        PortraitReference? best = null;
         int bestDistance = int.MaxValue;
 
         foreach (PortraitReference candidate in references)
@@ -225,12 +269,12 @@ public static class RoiReader
             if (distance < bestDistance)
             {
                 bestDistance = distance;
-                bestId = candidate.Id;
+                best = candidate;
             }
         }
 
-        return bestDistance <= roi.MaxHashDistance
-            ? new PortraitReading(bestId, bestDistance, hash)
+        return best is not null && bestDistance <= roi.MaxHashDistance
+            ? new PortraitReading(best.Id, bestDistance, hash) { Slot = best.Slot }
             : new PortraitReading(null, bestDistance == int.MaxValue ? 64 : bestDistance, hash);
     }
 

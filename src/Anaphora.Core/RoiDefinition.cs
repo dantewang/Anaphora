@@ -77,22 +77,48 @@ public sealed record FillBarRoi : RoiDefinition
 }
 
 /// <summary>
-/// A circular slot that either holds an icon or sits empty, read as a boolean.
+/// A circular slot read by its rings: a charge arc that sweeps clockwise from
+/// 12 o'clock, and an outer ring that lights up all the way round once the slot
+/// is ready.
 ///
-/// Endfield's ultimates: a coloured icon inside the small circle means castable,
-/// an empty dark disc with an arc on its ring means still charging. Only the
-/// inner disc is sampled so the ring's charge arc cannot sway the verdict.
+/// Endfield's ultimates. The first calibration judged the inner disc's mean
+/// brightness, which worked on a dark map and failed on the first bright one:
+/// the disc is translucent, and a sunlit floor seen through it is as bright as
+/// a ready icon. What does not depend on the background is the two vivid rings.
+/// Radii are fractions of half the bounds' shorter side, so the bounds must
+/// enclose the outer ring.
 /// </summary>
 public sealed record DiscStateRoi : RoiDefinition
 {
-    /// <summary>Fraction of the inscribed circle sampled, measured as a radius.</summary>
-    public double InnerRadius { get; init; } = 0.62;
+    /// <summary>Inner edge of the band the charge arc is drawn in.</summary>
+    public double ArcInner { get; init; } = 0.36;
 
-    /// <summary>Mean luma, 0..255, at or above which the slot counts as filled.</summary>
-    public double ReadyLuma { get; init; } = 60;
+    /// <summary>Outer edge of the charge arc band.</summary>
+    public double ArcOuter { get; init; } = 0.57;
 
-    /// <summary>Mean saturation, 0..1, required alongside the luma test.</summary>
-    public double ReadySaturation { get; init; } = 0.20;
+    /// <summary>A pixel belongs to the arc at or above this luma...</summary>
+    public double ArcLuma { get; init; } = 140;
+
+    /// <summary>...and this saturation. The tinted background inside the disc stays well below both.</summary>
+    public double ArcSaturation { get; init; } = 0.7;
+
+    /// <summary>Inner edge of the ring that is lit only when the slot is ready.</summary>
+    public double RingInner { get; init; } = 0.89;
+
+    public double RingOuter { get; init; } = 0.98;
+
+    public double RingLuma { get; init; } = 160;
+
+    public double RingSaturation { get; init; } = 0.75;
+
+    /// <summary>
+    /// Share of the ring's circumference that must be lit to count as ready.
+    /// Endfield's ready ring measures 86-89% -- it is not drawn quite all the way
+    /// round -- against 0% for every charging slot across both captured fights,
+    /// so the threshold sits in the middle of that gap, clear of a damage number
+    /// hiding part of a ready ring or a background stripe crossing a charging one.
+    /// </summary>
+    public double ReadyCoverage { get; init; } = 0.6;
 }
 
 /// <summary>
@@ -119,19 +145,24 @@ public sealed record PortraitSlotRoi : RoiDefinition
 /// Not a reading in its own right: a patch that says whether the HUD is on
 /// screen at all. Every other ROI's output is meaningless unless this passes.
 ///
-/// The test is two-sided -- the patch must be partly dark and partly not --
-/// because a HUD widget always shows both at once, a track against its borders
-/// and fill, while everything that replaces it is locally uniform. Measured over
-/// the skill-point bar on the captured frames: in combat 17-42% of the patch is
-/// dark and the rest is not, whereas a full-screen ultimate cut-in reads 100%
-/// lit, a menu 100% dark, and the reward screen 72% lit with no dark at all.
+/// Two modes. With a <see cref="Signature"/>, the patch must be mostly that
+/// colour -- the one Endfield uses, keyed on the left end of the player's HP
+/// bar: an opaque, saturated cyan that is there whenever the HUD is, on any
+/// background, and nowhere in cut-ins, menus or the reward screen.
 ///
-/// Matching a signature colour instead would fail on exactly the frames that
-/// matter: the cut-in that washes the strip white looks far more like a lit HUD
-/// than an empty bar does.
+/// Without one, the older contrast test applies: partly dark and partly not.
+/// It was calibrated on a dark map and fails on a bright one, where the
+/// translucent skill-point track shows the floor through it and loses its dark
+/// half; it also passes ordinary text on a dark page. Kept for HUDs with no
+/// opaque signature element.
 /// </summary>
 public sealed record PresenceRoi : RoiDefinition
 {
+    /// <summary>When set, presence means at least <see cref="MinimumCoverage"/> of the patch matches it.</summary>
+    public ColourGate? Signature { get; init; }
+
+    public double MinimumCoverage { get; init; } = 0.6;
+
     /// <summary>At or below this luma, 0..255, a pixel counts as background.</summary>
     public double DarkLuma { get; init; } = 40;
 

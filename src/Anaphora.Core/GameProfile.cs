@@ -20,8 +20,17 @@ public sealed record PortraitReference
 
     public required string DisplayName { get; init; }
 
-    /// <summary>64-bit dHash: an 8x9 grey grid compared column-wise.</summary>
+    /// <summary>64-bit dHash: an 8x9 grey grid compared column-wise. Written "0x" hex, as the probe prints it.</summary>
+    [System.Text.Json.Serialization.JsonConverter(typeof(HexUInt64JsonConverter))]
     public required ulong Hash { get; init; }
+
+    /// <summary>
+    /// The team slot this portrait belongs to, when known. Rotations are written
+    /// against slots, so a prompt is only actionable once it resolves to one.
+    /// Provisional: which operator sits in which slot is really the team's
+    /// business, not the game profile's, and will move when teams are modelled.
+    /// </summary>
+    public int? Slot { get; init; }
 }
 
 /// <summary>

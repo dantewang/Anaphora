@@ -221,6 +221,6 @@ public class RotationTrackerTests
 
         private static FillBarReading Bar(bool ready) => new(ready ? 1 : 0.1, ready);
 
-        private static DiscStateReading Disc(bool ready) => new(ready, ready ? 180 : 20, 0.5);
+        private static DiscStateReading Disc(bool ready) => new(ready, ready ? 1 : 0.3, ready ? 1 : 0.1);
     }
 }

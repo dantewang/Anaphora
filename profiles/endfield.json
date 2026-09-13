@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "endfield",
   "displayName": "Arknights: Endfield",
-  "notes": "Calibrated against captures/combat at 3840x2160 (2026-09-06) with the probe's sample command. Bar edges, disc centres and colours are measured; the chain-prompt slots are still eyeballed to about +/-3px because no full-resolution frame in the burst contains a prompt. Measured colours: skill point filled #F8F800, filling #F8F8F8, track #101010; chain ready #F8F8F8, cooling #A0A0A0, track #101010; ultimate inner disc luma 182 when ready against 16-51 when charging.",
+  "notes": "Calibrated at 3840x2160 against two fights: captures/combat (dark map, 2026-09-06) and captures/live/fight1 (bright map, 2026-09-13). The sentinel is the left end of the HP bar, an opaque cyan that survives bright floors; the first, contrast-based sentinel did not. Ultimates are read by their rings -- the charge arc at r 16-25 px and the ready ring at r 39-43 px of an 88 px slot -- because the inner disc is translucent and a sunlit floor seen through it looks like a ready icon. Chain prompt centres measured by radial scan: primary (2352,986), secondary (2524,1007).",
   "window": {
     "processName": "Endfield",
     "windowClass": "UnityWndClass"
@@ -13,10 +13,9 @@
       "kind": "presence",
       "id": "hud.present",
       "label": "HUD present",
-      "bounds": { "x": 0.415625, "y": 0.902315, "width": 0.168750, "height": 0.012037 },
-      "darkLuma": 40,
-      "minimumDark": 0.08,
-      "minimumLit": 0.10
+      "bounds": { "x": 0.417708, "y": 0.920370, "width": 0.023438, "height": 0.004630 },
+      "signature": { "target": "#12CCF9", "tolerance": 0.15 },
+      "minimumCoverage": 0.6
     },
     {
       "kind": "segmentedBar",
@@ -70,43 +69,51 @@
       "kind": "discState",
       "id": "ultimate.0",
       "label": "大招 1",
-      "bounds": { "x": 0.811719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
-      "innerRadius": 0.62,
-      "readyLuma": 100,
-      "readySaturation": 0
+      "bounds": { "x": 0.809635, "y": 0.804167, "width": 0.022917, "height": 0.040741 },
+      "arcInner": 0.36,
+      "arcOuter": 0.57,
+      "ringInner": 0.89,
+      "ringOuter": 0.98,
+      "readyCoverage": 0.6
     },
     {
       "kind": "discState",
       "id": "ultimate.1",
       "label": "大招 2",
-      "bounds": { "x": 0.861719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
-      "innerRadius": 0.62,
-      "readyLuma": 100,
-      "readySaturation": 0
+      "bounds": { "x": 0.859635, "y": 0.804167, "width": 0.022917, "height": 0.040741 },
+      "arcInner": 0.36,
+      "arcOuter": 0.57,
+      "ringInner": 0.89,
+      "ringOuter": 0.98,
+      "readyCoverage": 0.6
     },
     {
       "kind": "discState",
       "id": "ultimate.2",
       "label": "大招 3",
-      "bounds": { "x": 0.911719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
-      "innerRadius": 0.62,
-      "readyLuma": 100,
-      "readySaturation": 0
+      "bounds": { "x": 0.909635, "y": 0.804167, "width": 0.022917, "height": 0.040741 },
+      "arcInner": 0.36,
+      "arcOuter": 0.57,
+      "ringInner": 0.89,
+      "ringOuter": 0.98,
+      "readyCoverage": 0.6
     },
     {
       "kind": "discState",
       "id": "ultimate.3",
       "label": "大招 4",
-      "bounds": { "x": 0.961719, "y": 0.807870, "width": 0.018750, "height": 0.033333 },
-      "innerRadius": 0.62,
-      "readyLuma": 100,
-      "readySaturation": 0
+      "bounds": { "x": 0.959635, "y": 0.804167, "width": 0.022917, "height": 0.040741 },
+      "arcInner": 0.36,
+      "arcOuter": 0.57,
+      "ringInner": 0.89,
+      "ringOuter": 0.98,
+      "readyCoverage": 0.6
     },
     {
       "kind": "portraitSlot",
       "id": "chainPrompt.0",
       "label": "连携提示（先触发）",
-      "bounds": { "x": 0.594531, "y": 0.422222, "width": 0.039063, "height": 0.069444 },
+      "bounds": { "x": 0.592969, "y": 0.421759, "width": 0.039063, "height": 0.069444 },
       "priority": 0,
       "innerRadius": 0.80,
       "maxHashDistance": 12
@@ -115,11 +122,15 @@
       "kind": "portraitSlot",
       "id": "chainPrompt.1",
       "label": "连携提示（次）",
-      "bounds": { "x": 0.642969, "y": 0.440278, "width": 0.031250, "height": 0.055556 },
+      "bounds": { "x": 0.641667, "y": 0.438426, "width": 0.031250, "height": 0.055556 },
       "priority": 1,
       "innerRadius": 0.80,
       "maxHashDistance": 12
     }
   ],
-  "portraits": []
+  "portraits": [
+    { "id": "example-slot1", "displayName": "示例队伍 1 号位", "slot": 1, "hash": "0x677373E3E34F874F" },
+    { "id": "example-slot2", "displayName": "示例队伍 2 号位", "slot": 2, "hash": "0x7763F1F1F0F07069" },
+    { "id": "example-slot4", "displayName": "示例队伍 4 号位", "slot": 4, "hash": "0x95F1F1B6F2C86969" }
+  ]
 }

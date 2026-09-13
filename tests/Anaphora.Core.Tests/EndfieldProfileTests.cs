@@ -46,18 +46,17 @@ public class EndfieldProfileTests
     }
 
     [Fact]
-    public void TheSentinelSitsOverTheSkillPointBar()
+    public void TheSentinelIsTheLeftEndOfTheHpBar()
     {
-        // The whole HUD-validity trick rests on this overlap: skill points barely
-        // appear outside combat, so their presence is the cheapest "can I trust
-        // this frame" test available.
-        PixelRect sentinel = Profile.FindRoi("hud.present")!.Bounds.ToPixels(FrameWidth, FrameHeight);
+        // The HP bar drains from the right, so its left end stays cyan for as
+        // long as the player is alive -- and it sits just under the skill points.
+        var sentinel = (PresenceRoi)Profile.FindRoi("hud.present")!;
+        PixelRect patch = sentinel.Bounds.ToPixels(FrameWidth, FrameHeight);
         PixelRect bar = Profile.FindRoi("skillPoints")!.Bounds.ToPixels(FrameWidth, FrameHeight);
 
-        Assert.True(sentinel.X <= bar.X, "sentinel starts right of the bar");
-        Assert.True(sentinel.Right >= bar.Right, "sentinel ends left of the bar");
-        Assert.True(sentinel.Y <= bar.Y, "sentinel starts below the bar");
-        Assert.True(sentinel.Bottom >= bar.Bottom, "sentinel ends above the bar");
+        Assert.NotNull(sentinel.Signature);
+        Assert.True(patch.Y > bar.Bottom, "the HP bar is below the skill points");
+        Assert.True(patch.X >= bar.X && patch.Right < bar.X + (bar.Width / 4), "the patch should be the bar's left end");
     }
 
     [Fact]

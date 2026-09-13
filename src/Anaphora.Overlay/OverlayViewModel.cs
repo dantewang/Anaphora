@@ -155,7 +155,12 @@ public sealed partial class OverlayViewModel : ObservableObject
             }
         }
 
-        string[] prompts = [.. hud.Prompts.Where(p => p.IsPresent).Select(p => p.PortraitId!)];
+        string[] prompts =
+        [
+            .. hud.Prompts
+                .Where(p => p.IsPresent)
+                .Select(p => p.Slot?.ToString(CultureInfo.InvariantCulture) ?? p.PortraitId!),
+        ];
         PromptText = prompts.Length == 0 ? null : $"E › {string.Join("  ", prompts)}";
     }
 

@@ -118,18 +118,17 @@ internal static class HudCommand
     {
         if (!snapshot.HudPresent)
         {
-            return string.Create(
-                CultureInfo.InvariantCulture,
-                $"no hud  (dark {snapshot.Presence.DarkFraction:P0}, lit {snapshot.Presence.LitFraction:P0})");
+            return $"no hud  {snapshot.Presence}";
         }
 
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture, $"sp {snapshot.SkillPoints}  chain [");
         text.AppendJoin(' ', snapshot.Chains.Select(c => c.IsReady ? " RDY" : string.Create(CultureInfo.InvariantCulture, $"{c.Ratio * 100,3:F0}%")));
         text.Append("]  ult [");
-        text.AppendJoin(' ', snapshot.Ultimates.Select(u => u.IsReady ? "RDY" : " - "));
+        text.AppendJoin(' ', snapshot.Ultimates.Select(u => u.IsReady ? " RDY" : string.Create(CultureInfo.InvariantCulture, $"{u.Charge * 100,3:F0}%")));
         text.Append("]  prompt [");
-        text.AppendJoin(' ', snapshot.Prompts.Select(p => p.PortraitId ?? "-"));
+        text.AppendJoin(' ', snapshot.Prompts.Select(p =>
+            p.Slot?.ToString(CultureInfo.InvariantCulture) ?? p.PortraitId ?? "-"));
         text.Append(']');
         return text.ToString();
     }

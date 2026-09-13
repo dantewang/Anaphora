@@ -162,19 +162,29 @@ public static class ProfileValidator
                 break;
 
             case DiscStateRoi disc:
-                if (disc.InnerRadius is <= 0 or > 1)
+                if (disc.ArcInner <= 0 || disc.ArcInner >= disc.ArcOuter || disc.ArcOuter > 1)
                 {
-                    yield return $"{where}: innerRadius must be in (0, 1].";
+                    yield return $"{where}: need 0 < arcInner < arcOuter <= 1.";
                 }
 
-                if (disc.ReadyLuma is < 0 or > 255)
+                if (disc.RingInner <= 0 || disc.RingInner >= disc.RingOuter || disc.RingOuter > 1)
                 {
-                    yield return $"{where}: readyLuma must be in [0, 255].";
+                    yield return $"{where}: need 0 < ringInner < ringOuter <= 1.";
                 }
 
-                if (disc.ReadySaturation is < 0 or > 1)
+                if (disc.ArcLuma is < 0 or > 255 || disc.RingLuma is < 0 or > 255)
                 {
-                    yield return $"{where}: readySaturation must be in [0, 1].";
+                    yield return $"{where}: arcLuma and ringLuma must be in [0, 255].";
+                }
+
+                if (disc.ArcSaturation is < 0 or > 1 || disc.RingSaturation is < 0 or > 1)
+                {
+                    yield return $"{where}: arcSaturation and ringSaturation must be in [0, 1].";
+                }
+
+                if (disc.ReadyCoverage is <= 0 or > 1)
+                {
+                    yield return $"{where}: readyCoverage must be in (0, 1].";
                 }
 
                 break;
@@ -188,6 +198,19 @@ public static class ProfileValidator
                 if (slot.MaxHashDistance is < 0 or > 64)
                 {
                     yield return $"{where}: maxHashDistance must be in [0, 64] for a 64-bit hash.";
+                }
+
+                break;
+
+            case PresenceRoi { Signature: { } signature } presence:
+                if (!signature.IsValid)
+                {
+                    yield return $"{where}: signature.tolerance must be in (0, 1].";
+                }
+
+                if (presence.MinimumCoverage is <= 0 or > 1)
+                {
+                    yield return $"{where}: minimumCoverage must be in (0, 1].";
                 }
 
                 break;
