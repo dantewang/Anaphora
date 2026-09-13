@@ -1,12 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- The click-through, always-on-top Avalonia window that tracks the game window.
-       Rendering lives behind an interface so it can be swapped for a hand-rolled
-       DirectComposition surface if Avalonia's transparency misbehaves. -->
+       Everything the rest of the app touches goes through IOverlaySurface, so the
+       rendering can be swapped for a hand-rolled DirectComposition surface if
+       Avalonia's transparency misbehaves. -->
   <PropertyGroup>
     <TargetFramework>$(AnaphoraWindowsTargetFramework)</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Anaphora.Analysis/Anaphora.Analysis.csproj" />
     <ProjectReference Include="../Anaphora.Core/Anaphora.Core.csproj" />
   </ItemGroup>
 

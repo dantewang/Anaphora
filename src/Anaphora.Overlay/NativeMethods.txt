@@ -2,3 +2,18 @@
 // generator emits bindings for exactly what is listed here and nothing else.
 // Names must match the Win32 metadata exactly, so add entries as they are
 // needed rather than speculatively -- an unknown name is a build warning.
+
+// Click-through and never-activate styles on the overlay window.
+GetWindowLong
+SetWindowLong
+SetLayeredWindowAttributes
+WINDOW_EX_STYLE
+
+// Following the game window.
+SetWindowPos
+GetForegroundWindow
+GetClientRect
+ClientToScreen
+IsIconic
+IsWindow
+WindowFromPoint

@@ -12,8 +12,18 @@
     <ApplicationIcon></ApplicationIcon>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
   <ItemGroup>
     <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
+
+  <!-- The shipped profile and rotations sit next to the executable. -->
+  <ItemGroup>
+    <None Include="../../profiles/*.json" Link="profiles/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../rotations/*.json" Link="rotations/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

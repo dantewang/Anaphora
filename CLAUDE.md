@@ -99,10 +99,23 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
 - **不要用 WPF 的 `AllowsTransparency=true`**：会让窗口回退软件渲染。选 Avalonia 的
   一个主要原因就是它在 Windows 上默认走 `WinUIComposition`（底层 DirectComposition），
   透明窗口是硬件合成的。
-- Overlay 窗口：`SystemDecorations=None` + `Background=Transparent` +
-  `TransparencyLevelHint=Transparent` + `Topmost` + `ShowInTaskbar=false`，再对
-  `TopLevel.TryGetPlatformHandle().Handle` 设置
-  `WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`。常驻显示，**不需要点击交互**。
+- Overlay 窗口：**Avalonia 12 里是 `WindowDecorations="None"`，不是 11.x 的
+  `SystemDecorations`**。加上 `Background=Transparent`、`TransparencyLevelHint=Transparent`、
+  `Topmost`、`ShowInTaskbar=False`、`ShowActivated=False`，再对
+  `TryGetPlatformHandle().Handle` 设置
+  `WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`，并调
+  `SetLayeredWindowAttributes(alpha 255)`。**`WS_EX_TRANSPARENT` 只有配 `WS_EX_LAYERED`
+  才会把点击穿透给其他进程**；和 Avalonia 的 `WS_EX_NOREDIRECTIONBITMAP` 同时存在时仍能正常
+  渲染（开发机实测，`WindowFromPoint` 确认穿透）。常驻显示，**不需要点击交互**。
+- overlay 窗口只有面板那么大（`SizeToContent`），不是铺满游戏客户区；每 100ms 按游戏客户区
+  重新定位，并按 `客户区宽度 / RenderScaling / 1920` 整体缩放，保证占屏比例和视觉稿一致。
+  游戏不在前台或最小化时隐藏。
+- CsWin32 在 AnyCPU 下生成不了 `GetWindowLongPtr`/`SetWindowLongPtr`（只有 64 位导出），
+  扩展样式用 `GetWindowLong`/`SetWindowLong` 即可。
+- **截图验证 overlay 时要用带 `CAPTUREBLT` 的 `BitBlt`**；`Graphics.CopyFromScreen` 截不到
+  分层窗口，会让人误以为 overlay 没显示。
+- 在还没有配置界面之前，状态面板折叠、轴回到开头、跳过一步、退出都在**托盘菜单**里。
+  状态面板开关记在 `%LOCALAPPDATA%\Anaphora\settings.json`，日志在同目录 `app.log`。
 - Overlay 的渲染实现必须放在接口后面。若 Avalonia 的透明窗口出现 artifact 或性能问题，
   退路是手写 `WS_EX_NOREDIRECTIONBITMAP` + DirectComposition + Direct2D 窗口，
   届时只应替换这一个模块。
@@ -169,6 +182,10 @@ Unity 引擎。测试环境为无边框窗口 3840×2160，4K 显示器 + Window
   边框提供非暗），但连拍里技能点从没归零过，没有实拍样本。
 - **生产管线还没在游戏上跑过**。开发机上用 `hud` 对普通窗口验证了 GPU 图集与限帧，
   但真实 4K 游戏、战斗中的读数时间线要在游戏机上跑 `/hud`。
+- **HUD 哨兵对"任何有明暗对比的界面"都会放行。** 开发机上把 overlay 挂到 Claude 窗口测试时，
+  技能点条那块正好是深色页面上的文字，双侧对比判据通过了，于是读出了一套假读数。游戏里的
+  菜单、背包、地图如果在那个位置有文字，同样可能误判为"HUD 在"。需要在游戏机上专门看一次
+  各种非战斗界面；可能要给哨兵加第二个条件（比如三段边框的节距结构）。
 - **窗口化模式的客户区偏移没实测过**。算法和测试都覆盖了（fixture 贴进带边框的画布），
   但 DWM 边框的实际数值只有游戏切到窗口模式才能验证。
 - 长时间运行下的稳定性：游戏切分辨率 / alt-tab / 显示器切换时 `GraphicsCaptureItem`
@@ -348,6 +365,10 @@ dotnet build Anaphora.slnx
 dotnet test Anaphora.slnx
 dotnet run --project src/Anaphora.App
 
+# 开发机上没有游戏时，拿任意窗口检查 overlay 的定位、缩放与鼠标穿透（读数是假的）。
+# 结果看 %LOCALAPPDATA%\Anaphora\app.log，里面会写 "overlay is click-through"。
+dotnet run --project src/Anaphora.App -- --process claude --any-foreground
+
 # WGC 可行性探针。参数：进程名（默认 Endfield）、输出目录。
 # 打印窗口信息 / display affinity / 帧率 / 亮度统计，并落三张 PNG：全图、1280 宽预览、
 # 左上角原分辨率切片。换游戏或换机器时重跑一次。
@@ -419,8 +440,7 @@ dotnet run --project tools/Anaphora.CaptureProbe -- hud Endfield 30 20 20
 - **不要用串流（Moonlight / Parsec / Steam）的画面标定阈值**：视频压缩会改颜色、通常也不是
   4K，而连携条颜色门在 0.365 这种边界上就会判错。串流只适合看布局。
 
-脚手架阶段 `Anaphora.App` 是 `WinExe` 但还没有入口点，`dotnet build` 会以 CS5001
-失败；其余五个项目编译干净。写下第一个 `Program.cs` 后即恢复正常。
+整个解决方案现在应当 0 警告 0 错误编译通过。
 
 **这台机器上 `python` 是 WindowsApps 的占位 stub，静默失败什么都不做。**
 不要用它做文本替换或脚本处理，改用 Edit 工具或 `sed`。

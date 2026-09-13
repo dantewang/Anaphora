@@ -1,0 +1,307 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Anaphora.Overlay"
+        x:Class="Anaphora.Overlay.OverlayWindow"
+        x:DataType="local:OverlayViewModel"
+        Title="Anaphora Overlay"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        CanResize="False"
+        SizeToContent="WidthAndHeight"
+        Focusable="False">
+
+  <!-- Sized for a 1920-DIP-wide game at 100%; OverlayWindow scales the whole tree
+       so it keeps the same share of the screen at any resolution. The palette and
+       shapes follow the approved mockup, which took them from the game's HUD. -->
+  <Window.Resources>
+    <SolidColorBrush x:Key="Ground" Color="#A60A0B0B" />
+    <SolidColorBrush x:Key="Chip" Color="#CC141616" />
+    <SolidColorBrush x:Key="Hairline" Color="#26ECEBE6" />
+    <SolidColorBrush x:Key="Text" Color="#ECEBE6" />
+    <SolidColorBrush x:Key="Muted" Color="#8A8E8F" />
+    <SolidColorBrush x:Key="Amber" Color="#F0B429" />
+    <SolidColorBrush x:Key="SkillPoint" Color="#F8F800" />
+    <SolidColorBrush x:Key="Ready" Color="#F6F6F3" />
+    <SolidColorBrush x:Key="Cool" Color="#9A9A98" />
+    <SolidColorBrush x:Key="Cyan" Color="#19C3F0" />
+    <SolidColorBrush x:Key="Warn" Color="#E5484D" />
+    <FontFamily x:Key="Display">Bahnschrift SemiCondensed, Bahnschrift, Microsoft YaHei UI</FontFamily>
+    <FontFamily x:Key="Body">Microsoft YaHei UI, Segoe UI</FontFamily>
+
+    <DataTemplate x:Key="BigChip" x:DataType="local:StepChip">
+      <local:ShapeDecorator Classes="chip big"
+                            Classes.chain="{Binding IsChain}"
+                            Classes.heavy="{Binding IsHeavy}"
+                            Classes.ult="{Binding IsUltimate}"
+                            Classes.blocked="{Binding Blocked}">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+          <TextBlock Classes="badge" Text="{Binding Badge}" IsVisible="{Binding HasBadge}" />
+          <TextBlock Classes="main" Text="{Binding Main}" />
+        </StackPanel>
+      </local:ShapeDecorator>
+    </DataTemplate>
+
+    <DataTemplate x:Key="SmallChip" x:DataType="local:StepChip">
+      <local:ShapeDecorator Classes="chip small"
+                            Classes.chain="{Binding IsChain}"
+                            Classes.heavy="{Binding IsHeavy}"
+                            Classes.ult="{Binding IsUltimate}"
+                            Classes.blocked="{Binding Blocked}">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="1">
+          <TextBlock Classes="badge" Text="{Binding Badge}" IsVisible="{Binding HasBadge}" />
+          <TextBlock Classes="main" Text="{Binding Main}" />
+        </StackPanel>
+      </local:ShapeDecorator>
+    </DataTemplate>
+  </Window.Resources>
+
+  <Window.Styles>
+    <Style Selector="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+    </Style>
+    <Style Selector="TextBlock.lbl">
+      <Setter Property="FontSize" Value="9.5" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="1.5" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="FontFamily" Value="{StaticResource Body}" />
+    </Style>
+    <Style Selector="TextBlock.lbl.now">
+      <Setter Property="Foreground" Value="{StaticResource Amber}" />
+    </Style>
+
+    <!-- step chips -->
+    <Style Selector="local|ShapeDecorator.chip">
+      <Setter Property="Slant" Value="5" />
+      <Setter Property="Fill" Value="{StaticResource Chip}" />
+      <Setter Property="Stroke" Value="#29ECEBE6" />
+      <Setter Property="Padding" Value="9,0" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.big">
+      <Setter Property="Slant" Value="8" />
+      <Setter Property="MinWidth" Value="50" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Stroke" Value="{StaticResource Amber}" />
+      <Setter Property="StrokeThickness" Value="1.5" />
+      <Setter Property="Padding" Value="13,0" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.small">
+      <Setter Property="MinWidth" Value="29" />
+      <Setter Property="Height" Value="25" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip TextBlock.main">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip TextBlock.badge">
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.big TextBlock.main">
+      <Setter Property="FontSize" Value="24" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.big TextBlock.badge">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.small TextBlock.main">
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.small TextBlock.badge">
+      <Setter Property="FontSize" Value="9.5" />
+      <Setter Property="Margin" Value="0,0,0,5" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.chain">
+      <Setter Property="Fill" Value="{StaticResource Ready}" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.small.chain">
+      <Setter Property="Stroke" Value="{StaticResource Ready}" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.chain TextBlock">
+      <Setter Property="Foreground" Value="#111111" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.chain TextBlock.badge">
+      <Setter Property="Foreground" Value="#4A4A48" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.small.heavy">
+      <Setter Property="Stroke" Value="#8C19C3F0" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.heavy TextBlock.main">
+      <Setter Property="Foreground" Value="{StaticResource Cyan}" />
+      <Setter Property="FontFamily" Value="{StaticResource Body}" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.big.heavy TextBlock.main">
+      <Setter Property="FontSize" Value="20" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.small.heavy TextBlock.main">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.ult TextBlock.main">
+      <Setter Property="Foreground" Value="{StaticResource Amber}" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.ult TextBlock.badge">
+      <Setter Property="FontFamily" Value="{StaticResource Body}" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.big.blocked">
+      <Setter Property="Stroke" Value="{StaticResource Warn}" />
+    </Style>
+
+    <!-- status: skill points, slots -->
+    <Style Selector="Border.pip">
+      <Setter Property="Width" Value="22" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="RenderTransform" Value="skewX(-24deg)" />
+      <Setter Property="Background" Value="#14F8F800" />
+      <Setter Property="BorderBrush" Value="#59F8F800" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.pip.on">
+      <Setter Property="Background" Value="{StaticResource SkillPoint}" />
+      <Setter Property="BorderBrush" Value="{StaticResource SkillPoint}" />
+    </Style>
+    <Style Selector="Border.ult">
+      <Setter Property="Width" Value="13" />
+      <Setter Property="Height" Value="13" />
+      <Setter Property="RenderTransform" Value="rotate(45deg)" />
+      <Setter Property="BorderBrush" Value="#73F0B429" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.ult.on">
+      <Setter Property="Background" Value="{StaticResource Amber}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.key">
+      <Setter Property="Slant" Value="6" />
+      <Setter Property="Height" Value="25" />
+      <Setter Property="Fill" Value="{StaticResource Chip}" />
+      <Setter Property="Stroke" Value="#1FECEBE6" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.key TextBlock">
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.key.on TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Amber}" />
+    </Style>
+    <Style Selector="Border.fill">
+      <Setter Property="Background" Value="{StaticResource Cool}" />
+    </Style>
+    <Style Selector="Border.fill.on">
+      <Setter Property="Background" Value="{StaticResource Ready}" />
+    </Style>
+
+    <Style Selector="local|ShapeDecorator.panel">
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.25" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="local|ShapeDecorator.panel.stale">
+      <Setter Property="Opacity" Value="0.42" />
+    </Style>
+  </Window.Styles>
+
+  <LayoutTransformControl x:Name="Scaler">
+    <Panel Margin="0,0,0,26">
+      <local:ShapeDecorator Classes="panel"
+                            Classes.stale="{Binding !Live}"
+                            Chamfer="13"
+                            Fill="{StaticResource Ground}"
+                            Stroke="{StaticResource Hairline}">
+        <StackPanel Margin="14,11,14,12" Spacing="9">
+
+          <!-- what now -->
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <StackPanel Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+              <TextBlock Classes="lbl now" Text="{Binding NowLabel}" HorizontalAlignment="Center" />
+              <ContentControl Content="{Binding Current}" ContentTemplate="{StaticResource BigChip}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
+              <ItemsControl ItemsSource="{Binding NextSteps}" ItemTemplate="{StaticResource SmallChip}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="5" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+              </ItemsControl>
+              <TextBlock Text="{Binding Hint}" IsVisible="{Binding HasHint}"
+                         FontFamily="{StaticResource Body}" FontSize="9.5" FontWeight="Medium"
+                         Foreground="{StaticResource Warn}" />
+              <TextBlock Text="{Binding RoundText}" IsVisible="{Binding !HasHint}"
+                         FontFamily="Cascadia Mono, Consolas" FontSize="8.5"
+                         Foreground="{StaticResource Muted}" />
+            </StackPanel>
+          </Grid>
+
+          <!-- the readings behind it; foldable once they are trusted -->
+          <StackPanel Spacing="8" IsVisible="{Binding StatusVisible}">
+            <Border Height="1" Background="{StaticResource Hairline}" />
+
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
+              <TextBlock Classes="lbl" Text="技能点" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                <Border Classes="pip" Classes.on="{Binding Pip1}" />
+                <Border Classes="pip" Classes.on="{Binding Pip2}" />
+                <Border Classes="pip" Classes.on="{Binding Pip3}" />
+              </StackPanel>
+              <TextBlock Grid.Column="2" Text="{Binding SkillPoints}" FontSize="18" FontWeight="Bold"
+                         Foreground="{StaticResource SkillPoint}" VerticalAlignment="Center" />
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding Slots}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="5" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="local:SlotStatusViewModel">
+                  <StackPanel Width="45" Spacing="5">
+                    <Border Classes="ult" Classes.on="{Binding UltimateReady}" Margin="0,2,0,1" />
+                    <local:ShapeDecorator Classes="key" Classes.on="{Binding UltimateReady}">
+                      <TextBlock Text="{Binding Slot}" />
+                    </local:ShapeDecorator>
+                    <Panel Height="4" Background="#1AECEBE6">
+                      <Border Classes="fill" Classes.on="{Binding ChainReady}"
+                              HorizontalAlignment="Left" Width="{Binding ChainFillWidth}" />
+                    </Panel>
+                    <Panel Height="11">
+                      <TextBlock Text="连携" IsVisible="{Binding ChainReady}" HorizontalAlignment="Center"
+                                 FontFamily="{StaticResource Body}" FontSize="8" Foreground="{StaticResource Ready}" />
+                    </Panel>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasPrompt}">
+              <TextBlock Classes="lbl" Text="连携提示" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding PromptText}" FontSize="13" FontWeight="SemiBold" />
+            </StackPanel>
+          </StackPanel>
+        </StackPanel>
+      </local:ShapeDecorator>
+
+      <!-- amber tick on the uncut corner -->
+      <Border Width="27" Height="2" Background="{StaticResource Amber}"
+              HorizontalAlignment="Left" VerticalAlignment="Top" />
+
+      <Border IsVisible="{Binding !Live}" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+              Margin="0,0,0,-22" Padding="7,4" Background="#CC0A0B0B"
+              BorderBrush="{StaticResource Warn}" BorderThickness="2,0,0,0">
+        <TextBlock Text="{Binding StaleText}" FontFamily="{StaticResource Body}"
+                   FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Warn}" />
+      </Border>
+    </Panel>
+  </LayoutTransformControl>
+</Window>
