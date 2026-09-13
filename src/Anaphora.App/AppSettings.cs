@@ -13,6 +13,18 @@ internal sealed record AppSettings
     /// <summary>Open by default: early on, the readings need checking against the game.</summary>
     public bool StatusVisible { get; init; } = true;
 
+    /// <summary>
+    /// Hide the overlay once the HUD has been unreadable for <see cref="HideAfterSeconds"/>:
+    /// menus, the map, walking between fights. Will be a switch in the main window.
+    /// </summary>
+    public bool HideWhenHudAbsent { get; init; } = true;
+
+    /// <summary>Long enough to ride out an ultimate's cut-in without flickering.</summary>
+    public double HideAfterSeconds { get; init; } = 5;
+
+    /// <summary>Sends the rotation back to its start. Empty turns the hotkey off.</summary>
+    public string? ResetHotkey { get; init; } = "Ctrl+Alt+R";
+
     public static AppSettings Load()
     {
         try

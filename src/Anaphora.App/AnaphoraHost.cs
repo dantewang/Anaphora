@@ -30,11 +30,12 @@ internal sealed class AnaphoraHost : IDisposable
     private readonly DispatcherTimer discovery;
     private readonly DispatcherTimer placement;
     private readonly Lock trackerGate = new();
+    private readonly GlobalHotkey? resetHotkey;
 
     private AppSettings settings;
     private HudCapture? capture;
     private nint game;
-    private TimeSpan lastReadable;
+    private long lastReadableTicks;
     private Pending? pending;
     private int posted;
     private bool checkedClickThrough;
@@ -67,10 +68,38 @@ internal sealed class AnaphoraHost : IDisposable
         discovery = new DispatcherTimer(DiscoveryInterval, DispatcherPriority.Background, (_, _) => Discover());
         placement = new DispatcherTimer(PlacementInterval, DispatcherPriority.Render, (_, _) => Place());
 
+        if (HotkeyGesture.Parse(settings.ResetHotkey) is { } gesture)
+        {
+            resetHotkey = new GlobalHotkey(gesture);
+            resetHotkey.Pressed += () => Dispatcher.UIThread.Post(() =>
+            {
+                Log.Write($"rotation reset by {gesture}");
+                ResetRotation();
+            });
+        }
+        else if (!string.IsNullOrWhiteSpace(settings.ResetHotkey))
+        {
+            Log.Write($"[warn] reset hotkey \"{settings.ResetHotkey}\" not understood; expected e.g. Ctrl+Alt+R or Shift+F9");
+        }
+
         Log.Write($"started: profile {profile.Id}, rotation {rotation.Id}, process {options.ProcessName ?? profile.Window.ProcessName}");
     }
 
     public bool StatusVisible => surface.Model.StatusVisible;
+
+    public bool HideWhenHudAbsent => settings.HideWhenHudAbsent;
+
+    /// <summary>The reset hotkey as the tray should show it, or null when there is none.</summary>
+    public string? ResetHotkeyText => resetHotkey?.Gesture.Text;
+
+    /// <returns>The new state.</returns>
+    public bool ToggleHideWhenHudAbsent()
+    {
+        settings = settings with { HideWhenHudAbsent = !settings.HideWhenHudAbsent };
+        settings.Save();
+        Place();
+        return settings.HideWhenHudAbsent;
+    }
 
     public void Start()
     {
@@ -110,13 +139,14 @@ internal sealed class AnaphoraHost : IDisposable
             state = tracker.State;
         }
 
-        surface.Model.Apply(HudSnapshot.Absent, state, clock.Elapsed - lastReadable);
+        surface.Model.Apply(HudSnapshot.Absent, state, SinceReadable);
     }
 
     public void Dispose()
     {
         discovery.Stop();
         placement.Stop();
+        resetHotkey?.Dispose();
         StopCapture("shutting down");
         surface.Dispose();
     }
@@ -146,6 +176,9 @@ internal sealed class AnaphoraHost : IDisposable
 
             capture = started;
             game = window;
+            // Counts as readable for now, so a fresh capture is visible for a
+            // moment before a missing HUD can hide it.
+            Interlocked.Exchange(ref lastReadableTicks, clock.Elapsed.Ticks);
             Log.Write($"capturing {name} 0x{window:X}");
         }
         catch (Exception ex)
@@ -171,9 +204,21 @@ internal sealed class AnaphoraHost : IDisposable
         surface.Model.ShowWaiting("等待游戏窗口");
     }
 
+    private TimeSpan SinceReadable => clock.Elapsed - TimeSpan.FromTicks(Interlocked.Read(ref lastReadableTicks));
+
     private void Place()
     {
-        surface.Place(game == 0 ? null : GameWindowGeometry.ClientAreaOnScreen(game, options.RequireForeground));
+        Anaphora.Core.PixelRect? client = game == 0 ? null : GameWindowGeometry.ClientAreaOnScreen(game, options.RequireForeground);
+
+        // Held only while the game is in front: a registered combination is
+        // taken away from every other program.
+        if (resetHotkey is not null)
+        {
+            resetHotkey.Enabled = client is not null;
+        }
+
+        bool hudGone = settings.HideWhenHudAbsent && SinceReadable > TimeSpan.FromSeconds(settings.HideAfterSeconds);
+        surface.Place(hudGone ? null : client);
 
         if (!checkedClickThrough && game != 0 && surface.Handle != 0)
         {
@@ -192,7 +237,7 @@ internal sealed class AnaphoraHost : IDisposable
         TimeSpan now = clock.Elapsed;
         if (hud.HudPresent)
         {
-            lastReadable = now;
+            Interlocked.Exchange(ref lastReadableTicks, now.Ticks);
         }
 
         RotationState state;
@@ -211,7 +256,7 @@ internal sealed class AnaphoraHost : IDisposable
             Log.Write($"realigned to {state.Cursor}: now {state.Current.Step.Action}");
         }
 
-        Volatile.Write(ref pending, new Pending(hud, state, now - lastReadable));
+        Volatile.Write(ref pending, new Pending(hud, state, SinceReadable));
         if (Interlocked.Exchange(ref posted, 1) == 0)
         {
             Dispatcher.UIThread.Post(Flush, DispatcherPriority.Render);

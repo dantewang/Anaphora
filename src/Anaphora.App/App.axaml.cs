@@ -51,7 +51,14 @@ public partial class App : Application
         };
         status.Click += (_, _) => status.IsChecked = host.ToggleStatus();
 
-        var reset = new NativeMenuItem("轴回到开头");
+        var hide = new NativeMenuItem("读不到 HUD 时隐藏")
+        {
+            ToggleType = MenuItemToggleType.CheckBox,
+            IsChecked = host.HideWhenHudAbsent,
+        };
+        hide.Click += (_, _) => hide.IsChecked = host.ToggleHideWhenHudAbsent();
+
+        var reset = new NativeMenuItem(host.ResetHotkeyText is { } hotkey ? $"轴回到开头（{hotkey}）" : "轴回到开头");
         reset.Click += (_, _) => host.ResetRotation();
 
         var skip = new NativeMenuItem("跳过当前一步");
@@ -64,7 +71,7 @@ public partial class App : Application
         {
             Icon = DrawIcon(),
             ToolTipText = "Anaphora",
-            Menu = [status, reset, skip, new NativeMenuItemSeparator(), exit],
+            Menu = [status, hide, new NativeMenuItemSeparator(), reset, skip, new NativeMenuItemSeparator(), exit],
         };
     }
 

@@ -2,3 +2,15 @@
 // generator emits bindings for exactly what is listed here and nothing else.
 // Names must match the Win32 metadata exactly, so add entries as they are
 // needed rather than speculatively -- an unknown name is a build warning.
+
+// The rotation-reset hotkey, on a thread with its own message loop.
+RegisterHotKey
+UnregisterHotKey
+GetMessage
+PeekMessage
+PostThreadMessage
+GetCurrentThreadId
+WM_HOTKEY
+WM_QUIT
+WM_APP
+VIRTUAL_KEY

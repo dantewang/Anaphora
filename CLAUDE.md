@@ -114,7 +114,7 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
   扩展样式用 `GetWindowLong`/`SetWindowLong` 即可。
 - **截图验证 overlay 时要用带 `CAPTUREBLT` 的 `BitBlt`**；`Graphics.CopyFromScreen` 截不到
   分层窗口，会让人误以为 overlay 没显示。
-- 在还没有配置界面之前，状态面板折叠、轴回到开头、跳过一步、退出都在**托盘菜单**里。
+- 在还没有配置界面之前，状态面板折叠、读不到 HUD 时隐藏、轴回到开头、跳过一步、退出都在**托盘菜单**里。
   状态面板开关记在 `%LOCALAPPDATA%\Anaphora\settings.json`，日志在同目录 `app.log`。
 - Overlay 的渲染实现必须放在接口后面。若 Avalonia 的透明窗口出现 artifact 或性能问题，
   退路是手写 `WS_EX_NOREDIRECTIONBITMAP` + DirectComposition + Direct2D 窗口，
@@ -228,7 +228,16 @@ Unity 引擎。测试环境为无边框窗口 3840×2160，4K 显示器 + Window
   所以折叠开关不在 overlay 上。
 - **重击怎么识别还没有答案**（游戏里重击没有单独按键），之后再讨论。在那之前，
   跟踪器靠"后面某一步被识别到"来越过重击步骤。
-- **不读键盘输入。** 步骤是否完成只从画面推断。
+- **不读键盘输入。** 步骤是否完成只从画面推断。**全局快捷键不算读键盘**：走 `RegisterHotKey`，
+  Windows 只在那一个组合被按下时通知程序，其他按键一概看不到、也不 hook 键盘——和聊天软件的截图
+  快捷键是同一套公开机制，用户确认可以用。
+- **"轴回到开头"的快捷键**默认 `Ctrl+Alt+R`，`settings.json` 的 `resetHotkey` 可改（空串关闭）。
+  注册了的组合会从所有程序（包括游戏）手里拿走，所以**只在游戏在前台时注册**，切走就注销。
+  `RegisterHotKey` 把 `WM_HOTKEY` 投给注册它的线程，而 UI 线程的消息循环归 Avalonia 管，
+  所以快捷键有自己的线程和消息循环（`GlobalHotkey`）。被别的程序占用时 `app.log` 里有 `[warn]`。
+- **HUD 读不到一段时间后自动隐藏 overlay**（地图、背包、战斗之间跑图）：`hideWhenHudAbsent`
+  默认开，`hideAfterSeconds` 默认 5 秒，要长过大招特写，免得闪。托盘里有开关，
+  以后挪到主界面（调设定、编辑/导入轴）。刚开始抓取时算作"刚读到过"，先显示 5 秒再判断。
 
 **示例轴**（就是 `captures/combat` 里那支队伍，主控为 1）：
 
