@@ -66,11 +66,40 @@ public sealed class HudReader
     /// <summary>True when the profile has no sentinel, in which case every frame is read.</summary>
     public bool ReadsBlind => sentinel is null;
 
-    public HudSnapshot Read(in FrameView frame)
+    /// <summary>Reads a frame whose coordinates are already the client area.</summary>
+    public HudSnapshot Read(in FrameView frame) => ReadCore(frame, null);
+
+    /// <summary>
+    /// Reads the atlas the capture pipeline produced. The atlas must have been
+    /// laid out from this reader's profile: slots are looked up by ROI id, and a
+    /// different profile would hand the readers another ROI's pixels.
+    /// </summary>
+    public HudSnapshot Read(in FrameView atlasPixels, RoiAtlas atlas)
     {
-        PresenceReading presence = sentinel is null
-            ? new PresenceReading(true, 0, 0)
-            : RoiReader.Read(sentinel, frame);
+        ArgumentNullException.ThrowIfNull(atlas);
+        if (!ReferenceEquals(atlas.Profile, Profile) && !atlas.Profile.Equals(Profile))
+        {
+            throw new ArgumentException("the atlas was laid out for a different profile.", nameof(atlas));
+        }
+
+        return ReadCore(atlasPixels, atlas);
+    }
+
+    private HudSnapshot ReadCore(in FrameView frame, RoiAtlas? atlas)
+    {
+        PresenceReading presence;
+        if (sentinel is null)
+        {
+            presence = new PresenceReading(true, 0, 0);
+        }
+        else if (!View(frame, atlas, sentinel, out FrameView sentinelView))
+        {
+            presence = new PresenceReading(false, 0, 0);
+        }
+        else
+        {
+            presence = RoiReader.Read(sentinel, sentinelView);
+        }
 
         if (!presence.IsPresent)
         {
@@ -80,29 +109,50 @@ public sealed class HudReader
         var chainReadings = new FillBarReading[chains.Length];
         for (int i = 0; i < chains.Length; i++)
         {
-            chainReadings[i] = RoiReader.Read(chains[i], frame);
+            chainReadings[i] = View(frame, atlas, chains[i], out FrameView view)
+                ? RoiReader.Read(chains[i], view)
+                : default;
         }
 
         var ultimateReadings = new DiscStateReading[ultimates.Length];
         for (int i = 0; i < ultimates.Length; i++)
         {
-            ultimateReadings[i] = RoiReader.Read(ultimates[i], frame);
+            ultimateReadings[i] = View(frame, atlas, ultimates[i], out FrameView view)
+                ? RoiReader.Read(ultimates[i], view)
+                : default;
         }
 
         var promptReadings = new PortraitReading[prompts.Length];
         for (int i = 0; i < prompts.Length; i++)
         {
-            promptReadings[i] = RoiReader.Read(prompts[i], frame, portraits);
+            promptReadings[i] = View(frame, atlas, prompts[i], out FrameView view)
+                ? RoiReader.Read(prompts[i], view, portraits)
+                : new PortraitReading(null, 64, 0);
         }
+
+        int banked = skillPoints is not null && View(frame, atlas, skillPoints, out FrameView skillView)
+            ? RoiReader.Read(skillPoints, skillView).Filled
+            : 0;
 
         return new HudSnapshot
         {
             HudPresent = true,
             Presence = presence,
-            SkillPoints = skillPoints is null ? 0 : RoiReader.Read(skillPoints, frame).Filled,
+            SkillPoints = banked,
             Chains = chainReadings,
             Ultimates = ultimateReadings,
             Prompts = promptReadings,
         };
+    }
+
+    private static bool View(in FrameView frame, RoiAtlas? atlas, RoiDefinition roi, out FrameView view)
+    {
+        if (atlas is null)
+        {
+            view = frame;
+            return true;
+        }
+
+        return atlas.TryViewFor(frame, roi, out view);
     }
 }
