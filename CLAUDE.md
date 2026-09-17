@@ -120,6 +120,7 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
   （`RotationGraph` 自绘：每段一条泳道，软提示叠在卡片上方、等待条件在下方，箭头画去向/分支/下一轮）、
   下方快速输入、右边步骤属性和 overlay 预览；另有设定页。启动时打开，关窗只是隐藏，托盘可再打开。
   托盘仍保留状态面板、隐藏、轴回到开头、跳过一步、退出这些快捷开关，和设定页双向同步。
+  设定记在 `%LOCALAPPDATA%\Anaphora\settings.json`，日志在同目录 `app.log`。
 - **轴库**在 `%LOCALAPPDATA%\Anaphora\rotations\<id>.json`，随程序发的轴缺哪个补哪个（不覆盖用户改过的）。
   `settings.json` 的 `activeRotation` 是 overlay 跟的那条；`--rotation` 命令行参数优先。
   导入（文件/剪贴板，id 冲突自动改名）、导出（文件/剪贴板）、复制、新建；改了没存的轴留在内存里，
