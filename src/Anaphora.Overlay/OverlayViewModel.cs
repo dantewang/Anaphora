@@ -5,36 +5,53 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Anaphora.Overlay;
 
-/// <summary>
-/// One step as a chip: what to press, drawn by slot. A skill is the digit, a
-/// chain is E with the slot as a badge, a heavy attack is 重击 with the slot, an
-/// ultimate is the digit badged 长按.
-/// </summary>
-public sealed record StepChip(ActionKind Kind, int Slot, bool Blocked)
+public enum ChipTone
 {
-    public string Main => Kind switch
-    {
-        ActionKind.Chain => "E",
-        ActionKind.Heavy => "重击",
-        _ => Slot.ToString(CultureInfo.InvariantCulture),
-    };
+    Skill,
+    Chain,
+    Ultimate,
 
-    public string Badge => Kind switch
-    {
-        ActionKind.Chain or ActionKind.Heavy => Slot.ToString(CultureInfo.InvariantCulture),
-        ActionKind.Ultimate => "长按",
-        _ => string.Empty,
-    };
+    /// <summary>A soft cue: nothing confirms it, it just leads into the step after it.</summary>
+    Cue,
+}
 
+/// <summary>
+/// One thing to do, as a chip, drawn by slot. A skill is the digit, a chain is E
+/// badged with the slot, an ultimate is the digit badged 长按. Cues come before
+/// their step with a dashed outline: 重击 badged with the slot, 第2下 badged
+/// "3 技能后", or free text.
+/// </summary>
+public sealed record StepChip(ChipTone Tone, string Main, string Badge, bool Blocked)
+{
     public bool HasBadge => Badge.Length > 0;
 
-    public bool IsChain => Kind == ActionKind.Chain;
+    public bool IsChain => Tone == ChipTone.Chain;
 
-    public bool IsHeavy => Kind == ActionKind.Heavy;
+    public bool IsUltimate => Tone == ChipTone.Ultimate;
 
-    public bool IsUltimate => Kind == ActionKind.Ultimate;
+    public bool IsCue => Tone == ChipTone.Cue;
 
-    public static StepChip From(StepView view) => new(view.Step.Action.Kind, view.Step.Action.Slot, view.Blocked);
+    public static StepChip From(RotationAction action, bool blocked)
+    {
+        string slot = action.Slot.ToString(CultureInfo.InvariantCulture);
+        return action.Kind switch
+        {
+            ActionKind.Chain => new StepChip(ChipTone.Chain, "E", slot, blocked),
+            ActionKind.Ultimate => new StepChip(ChipTone.Ultimate, slot, "长按", blocked),
+            _ => new StepChip(ChipTone.Skill, slot, string.Empty, blocked),
+        };
+    }
+
+    public static StepChip From(SoftCue cue, bool blocked) => cue.Kind switch
+    {
+        CueKind.Heavy => new StepChip(ChipTone.Cue, "重击", cue.Slot.ToString(CultureInfo.InvariantCulture), blocked),
+        CueKind.AttackAfterSkill => new StepChip(ChipTone.Cue, $"第{cue.Count}下", $"{cue.Slot}技能后", blocked),
+        _ => new StepChip(ChipTone.Cue, cue.Text ?? string.Empty, string.Empty, blocked),
+    };
+
+    /// <summary>A step's cues, then the step itself.</summary>
+    public static IEnumerable<StepChip> Sequence(StepView view) =>
+        [.. view.Step.Before.Select(c => From(c, view.Blocked)), From(view.Step.Action, view.Blocked)];
 }
 
 public sealed partial class SlotStatusViewModel(int slot) : ObservableObject
@@ -79,15 +96,21 @@ public sealed partial class OverlayViewModel : ObservableObject
     [ObservableProperty]
     public partial bool StatusVisible { get; set; } = true;
 
+    /// <summary>What to do now: the current step's cues, then the step.</summary>
     [ObservableProperty]
-    public partial StepChip? Current { get; set; }
+    public partial IReadOnlyList<StepChip> Now { get; set; } = [];
 
     [ObservableProperty]
     public partial IReadOnlyList<StepChip> NextSteps { get; set; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasHint))]
+    [NotifyPropertyChangedFor(nameof(HasHint), nameof(ShowNote), nameof(ShowRound))]
     public partial string? Hint { get; set; }
+
+    /// <summary>The current step's note, shown while nothing is blocking.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNote), nameof(ShowRound))]
+    public partial string? Note { get; set; }
 
     [ObservableProperty]
     public partial string RoundText { get; set; } = string.Empty;
@@ -104,6 +127,10 @@ public sealed partial class OverlayViewModel : ObservableObject
     public partial string? PromptText { get; set; }
 
     public bool HasHint => !string.IsNullOrEmpty(Hint);
+
+    public bool ShowNote => !HasHint && !string.IsNullOrEmpty(Note);
+
+    public bool ShowRound => !HasHint && string.IsNullOrEmpty(Note);
 
     public bool HasPrompt => !string.IsNullOrEmpty(PromptText);
 
@@ -126,12 +153,13 @@ public sealed partial class OverlayViewModel : ObservableObject
             CultureInfo.InvariantCulture,
             $"HUD 不可见 · 保留 {sinceReadable.TotalSeconds:F1} 秒前的读数");
 
-        Current = StepChip.From(rotation.Current);
-        NextSteps = [.. rotation.Next.Select(StepChip.From)];
+        Now = [.. StepChip.Sequence(rotation.Current)];
+        NextSteps = [.. rotation.Next.SelectMany(StepChip.Sequence)];
         Hint = HintFor(rotation);
+        Note = rotation.Current.Step.Note;
         RoundText = string.Create(
             CultureInfo.InvariantCulture,
-            $"第 {rotation.Cursor.Round} 轮 · {rotation.Cursor.Index + 1}/{rotation.StepsInRound}");
+            $"第 {rotation.Cursor.Round} 轮 · {rotation.SegmentName} {rotation.Position}/{rotation.SegmentLength}");
 
         // An absent HUD keeps the last good numbers on screen, dimmed.
         if (!hud.HudPresent)
@@ -175,12 +203,15 @@ public sealed partial class OverlayViewModel : ObservableObject
     {
         if (rotation.Current.Blocked)
         {
-            return rotation.Current.Step.Note ?? $"等待 {string.Join(", ", rotation.Current.Conditions.Where(c => !c.Met).Select(c => c.Condition))}";
+            return rotation.Current.Step.Note ?? $"等待 {Unmet(rotation.Current)}";
         }
 
         StepView? upcoming = rotation.Next.FirstOrDefault(n => n.Blocked);
         return upcoming is null
             ? null
-            : $"{upcoming.Step.Action}：{upcoming.Step.Note ?? string.Join(", ", upcoming.Conditions.Where(c => !c.Met).Select(c => c.Condition))}";
+            : $"{upcoming.Step.Action}：{upcoming.Step.Note ?? $"等待 {Unmet(upcoming)}"}";
     }
+
+    private static string Unmet(StepView view) =>
+        string.Join("，", view.Conditions.Where(c => !c.Met).Select(c => c.Condition.Description));
 }

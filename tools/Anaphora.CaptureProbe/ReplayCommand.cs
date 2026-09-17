@@ -52,7 +52,7 @@ internal static class ReplayCommand
                 line.Append(CultureInfo.InvariantCulture, $"  ring [{string.Join(' ', snapshot.Ultimates.Select(u => $"{u.RingCoverage * 100,3:F0}"))}]");
             }
             line.Append(CultureInfo.InvariantCulture, $"  | now {state.Current.Step.Action,-6}");
-            line.Append(CultureInfo.InvariantCulture, $" r{state.Cursor.Round} {state.Cursor.Index + 1}/{state.StepsInRound}");
+            line.Append(CultureInfo.InvariantCulture, $" r{state.Cursor.Round} {state.SegmentName}{state.Position}/{state.SegmentLength}");
 
             if (state.Current.Blocked)
             {
@@ -66,7 +66,7 @@ internal static class ReplayCommand
 
             if (state.Completed.Count > 0)
             {
-                line.Append(CultureInfo.InvariantCulture, $"  done {string.Join(" ", state.Completed)}");
+                line.Append(CultureInfo.InvariantCulture, $"  done {string.Join(" ", state.Completed.Select(s => s.Action))}");
             }
 
             if (state.Unexpected.Count > 0)

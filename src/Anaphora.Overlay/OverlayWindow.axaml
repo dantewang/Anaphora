@@ -29,26 +29,31 @@
     <SolidColorBrush x:Key="Cool" Color="#9A9A98" />
     <SolidColorBrush x:Key="Cyan" Color="#19C3F0" />
     <SolidColorBrush x:Key="Warn" Color="#E5484D" />
+    <SolidColorBrush x:Key="Lime" Color="#B8D433" />
     <FontFamily x:Key="Display">Bahnschrift SemiCondensed, Bahnschrift, Microsoft YaHei UI</FontFamily>
     <FontFamily x:Key="Body">Microsoft YaHei UI, Segoe UI</FontFamily>
 
+    <!-- A cue is as big as the step it leads into and carries a › towards it. -->
     <DataTemplate x:Key="BigChip" x:DataType="local:StepChip">
-      <local:ShapeDecorator Classes="chip big"
-                            Classes.chain="{Binding IsChain}"
-                            Classes.heavy="{Binding IsHeavy}"
-                            Classes.ult="{Binding IsUltimate}"
-                            Classes.blocked="{Binding Blocked}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
-          <TextBlock Classes="badge" Text="{Binding Badge}" IsVisible="{Binding HasBadge}" />
-          <TextBlock Classes="main" Text="{Binding Main}" />
-        </StackPanel>
-      </local:ShapeDecorator>
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <local:ShapeDecorator Classes="chip big"
+                              Classes.chain="{Binding IsChain}"
+                              Classes.cue="{Binding IsCue}"
+                              Classes.ult="{Binding IsUltimate}"
+                              Classes.blocked="{Binding Blocked}">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+            <TextBlock Classes="badge" Text="{Binding Badge}" IsVisible="{Binding HasBadge}" />
+            <TextBlock Classes="main" Text="{Binding Main}" />
+          </StackPanel>
+        </local:ShapeDecorator>
+        <TextBlock Classes="then big" Text="›" IsVisible="{Binding IsCue}" />
+      </StackPanel>
     </DataTemplate>
 
     <DataTemplate x:Key="SmallChip" x:DataType="local:StepChip">
       <local:ShapeDecorator Classes="chip small"
                             Classes.chain="{Binding IsChain}"
-                            Classes.heavy="{Binding IsHeavy}"
+                            Classes.cue="{Binding IsCue}"
                             Classes.ult="{Binding IsUltimate}"
                             Classes.blocked="{Binding Blocked}">
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="1">
@@ -129,18 +134,35 @@
     <Style Selector="local|ShapeDecorator.chip.chain TextBlock.badge">
       <Setter Property="Foreground" Value="#4A4A48" />
     </Style>
-    <Style Selector="local|ShapeDecorator.chip.small.heavy">
-      <Setter Property="Stroke" Value="#8C19C3F0" />
+    <!-- soft cues: dashed lime, nothing confirms them -->
+    <Style Selector="local|ShapeDecorator.chip.cue">
+      <Setter Property="Dashed" Value="True" />
+      <Setter Property="Fill" Value="#330A0B0B" />
+      <Setter Property="Stroke" Value="#B3B8D433" />
     </Style>
-    <Style Selector="local|ShapeDecorator.chip.heavy TextBlock.main">
-      <Setter Property="Foreground" Value="{StaticResource Cyan}" />
+    <Style Selector="local|ShapeDecorator.chip.big.cue">
+      <Setter Property="Stroke" Value="{StaticResource Lime}" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.cue TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Lime}" />
       <Setter Property="FontFamily" Value="{StaticResource Body}" />
     </Style>
-    <Style Selector="local|ShapeDecorator.chip.big.heavy TextBlock.main">
+    <Style Selector="local|ShapeDecorator.chip.cue TextBlock.badge">
+      <Setter Property="Foreground" Value="#B3B8D433" />
+    </Style>
+    <Style Selector="local|ShapeDecorator.chip.big.cue TextBlock.main">
       <Setter Property="FontSize" Value="20" />
     </Style>
-    <Style Selector="local|ShapeDecorator.chip.small.heavy TextBlock.main">
+    <Style Selector="local|ShapeDecorator.chip.small.cue TextBlock.main">
       <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.then">
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.then.big">
+      <Setter Property="FontSize" Value="22" />
     </Style>
     <Style Selector="local|ShapeDecorator.chip.ult TextBlock.main">
       <Setter Property="Foreground" Value="{StaticResource Amber}" />
@@ -220,11 +242,17 @@
                             Stroke="{StaticResource Hairline}">
         <StackPanel Margin="14,11,14,12" Spacing="9">
 
-          <!-- what now -->
+          <!-- what now: cues, then the step -->
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
             <StackPanel Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
               <TextBlock Classes="lbl now" Text="{Binding NowLabel}" HorizontalAlignment="Center" />
-              <ContentControl Content="{Binding Current}" ContentTemplate="{StaticResource BigChip}" />
+              <ItemsControl ItemsSource="{Binding Now}" ItemTemplate="{StaticResource BigChip}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="6" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+              </ItemsControl>
             </StackPanel>
             <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
               <ItemsControl ItemsSource="{Binding NextSteps}" ItemTemplate="{StaticResource SmallChip}">
@@ -237,7 +265,10 @@
               <TextBlock Text="{Binding Hint}" IsVisible="{Binding HasHint}"
                          FontFamily="{StaticResource Body}" FontSize="9.5" FontWeight="Medium"
                          Foreground="{StaticResource Warn}" />
-              <TextBlock Text="{Binding RoundText}" IsVisible="{Binding !HasHint}"
+              <TextBlock Text="{Binding Note}" IsVisible="{Binding ShowNote}"
+                         FontFamily="{StaticResource Body}" FontSize="9.5" FontWeight="Medium"
+                         Foreground="{StaticResource Muted}" />
+              <TextBlock Text="{Binding RoundText}" IsVisible="{Binding ShowRound}"
                          FontFamily="Cascadia Mono, Consolas" FontSize="8.5"
                          Foreground="{StaticResource Muted}" />
             </StackPanel>

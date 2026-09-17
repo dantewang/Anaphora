@@ -4,7 +4,10 @@ using System.Text.Json.Serialization;
 
 namespace Anaphora.Core;
 
-/// <summary>What kind of input a rotation step asks for.</summary>
+/// <summary>
+/// What kind of input a rotation step asks for. Only inputs the HUD can confirm
+/// are steps; heavy attacks and the like are <see cref="SoftCue"/>s.
+/// </summary>
 public enum ActionKind
 {
     /// <summary>Slot N's skill: press N.</summary>
@@ -12,9 +15,6 @@ public enum ActionKind
 
     /// <summary>Slot N's chain: press E while N's portrait leads the prompt.</summary>
     Chain,
-
-    /// <summary>Slot N's heavy attack: the last hit of a basic-attack string. No key of its own.</summary>
-    Heavy,
 
     /// <summary>Slot N's ultimate: hold N.</summary>
     Ultimate,
@@ -33,16 +33,24 @@ public readonly record struct RotationAction(int Slot, ActionKind Kind)
 
     public bool IsValid => Slot is >= MinSlot and <= MaxSlot && Enum.IsDefined(Kind);
 
+    /// <summary>What the player presses: "按 3", "按 E", "长按 2".</summary>
+    public string KeyText => Kind switch
+    {
+        ActionKind.Chain => "按 E",
+        ActionKind.Ultimate => $"长按 {Slot}",
+        _ => $"按 {Slot}",
+    };
+
     /// <summary>
-    /// "3", "4E", "1重击", "2大招"; "1H" and "2U" are accepted as ASCII aliases.
-    /// Surrounding whitespace is ignored, case is not significant.
+    /// "3", "4E", "2大招"; "2U" is accepted as an ASCII alias. Surrounding
+    /// whitespace is ignored, case is not significant.
     /// </summary>
     public static RotationAction Parse(string text)
     {
         if (!TryParse(text, out RotationAction action))
         {
             throw new FormatException(
-                $"'{text}' is not a rotation step. Write N, NE, N重击 or N大招 with N in 1-4 (NH and NU also work).");
+                $"'{text}' is not a rotation step. Write N, NE or N大招 with N in 1-4 (NU also works).");
         }
 
         return action;
@@ -51,27 +59,16 @@ public readonly record struct RotationAction(int Slot, ActionKind Kind)
     public static bool TryParse(string? text, out RotationAction action)
     {
         action = default;
-        if (string.IsNullOrWhiteSpace(text))
+        if (!Notation.TrySplitSlot(text, out int slot, out ReadOnlySpan<char> suffix))
         {
             return false;
         }
-
-        ReadOnlySpan<char> span = text.AsSpan().Trim();
-        if (span.Length == 0 || span[0] is < '1' or > '4')
-        {
-            return false;
-        }
-
-        int slot = span[0] - '0';
-        ReadOnlySpan<char> suffix = span[1..].Trim();
 
         ActionKind? kind = suffix switch
         {
             [] => ActionKind.Skill,
             ['E' or 'e'] => ActionKind.Chain,
-            ['H' or 'h'] => ActionKind.Heavy,
             ['U' or 'u'] => ActionKind.Ultimate,
-            _ when suffix.SequenceEqual("重击") => ActionKind.Heavy,
             _ when suffix.SequenceEqual("大招") => ActionKind.Ultimate,
             _ => null,
         };
@@ -85,14 +82,112 @@ public readonly record struct RotationAction(int Slot, ActionKind Kind)
         return true;
     }
 
-    /// <summary>The canonical notation: N, NE, N重击, N大招.</summary>
+    /// <summary>The canonical notation: N, NE, N大招.</summary>
     public override string ToString() => Kind switch
     {
         ActionKind.Skill => Slot.ToString(CultureInfo.InvariantCulture),
         ActionKind.Chain => $"{Slot}E",
-        ActionKind.Heavy => $"{Slot}重击",
         ActionKind.Ultimate => $"{Slot}大招",
         _ => $"{Slot}?",
+    };
+}
+
+public enum CueKind
+{
+    /// <summary>Slot N's heavy attack: the last hit of a basic-attack string. No key of its own.</summary>
+    Heavy,
+
+    /// <summary>
+    /// The Nth basic attack after slot N's skill. Some operators' skills put them
+    /// in a state where basic attacks change, and the rotation may continue after
+    /// a particular one rather than the last.
+    /// </summary>
+    AttackAfterSkill,
+
+    /// <summary>Free text: anything else worth saying before the next input.</summary>
+    Text,
+}
+
+/// <summary>
+/// Something the player should do before a step that the HUD cannot confirm. The
+/// tracker never waits for a cue; the overlay shows it together with the step it
+/// leads into.
+///
+/// Written "1重击" (or "1H"), "3普攻2" (or "3A2") for the second basic attack
+/// after slot 3's skill, or <c>{ "text": "…" }</c>.
+/// </summary>
+[JsonConverter(typeof(SoftCueJsonConverter))]
+public readonly record struct SoftCue(CueKind Kind, int Slot, int Count = 0, string? Text = null)
+{
+    public const int MaxCount = 9;
+
+    public static SoftCue Heavy(int slot) => new(CueKind.Heavy, slot);
+
+    public static SoftCue AttackAfterSkill(int slot, int count) => new(CueKind.AttackAfterSkill, slot, count);
+
+    public static SoftCue Say(string text) => new(CueKind.Text, 0, 0, text);
+
+    public bool IsValid => Kind switch
+    {
+        CueKind.Heavy => Slot is >= RotationAction.MinSlot and <= RotationAction.MaxSlot,
+        CueKind.AttackAfterSkill => Slot is >= RotationAction.MinSlot and <= RotationAction.MaxSlot && Count is >= 1 and <= MaxCount,
+        CueKind.Text => !string.IsNullOrWhiteSpace(Text),
+        _ => false,
+    };
+
+    /// <summary>For people: "1 重击", "3 技能后第 2 下普攻".</summary>
+    public string Description => Kind switch
+    {
+        CueKind.Heavy => $"{Slot} 重击",
+        CueKind.AttackAfterSkill => $"{Slot} 技能后第 {Count} 下普攻",
+        _ => Text ?? string.Empty,
+    };
+
+    public static SoftCue Parse(string text)
+    {
+        if (!TryParse(text, out SoftCue cue))
+        {
+            throw new FormatException($"'{text}' is not a cue. Write N重击 or N普攻K (NH and NAK also work).");
+        }
+
+        return cue;
+    }
+
+    /// <summary>The notation forms only; free text is not parsed from a bare string.</summary>
+    public static bool TryParse(string? text, out SoftCue cue)
+    {
+        cue = default;
+        if (!Notation.TrySplitSlot(text, out int slot, out ReadOnlySpan<char> suffix))
+        {
+            return false;
+        }
+
+        if (suffix is ['H' or 'h'] || suffix.SequenceEqual("重击"))
+        {
+            cue = Heavy(slot);
+            return true;
+        }
+
+        ReadOnlySpan<char> count =
+            suffix.StartsWith("普攻") ? suffix[2..]
+            : suffix is ['A' or 'a', ..] ? suffix[1..]
+            : [];
+
+        if (count is [>= '1' and <= '9'])
+        {
+            cue = AttackAfterSkill(slot, count[0] - '0');
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The notation, or the text itself for a free-text cue.</summary>
+    public override string ToString() => Kind switch
+    {
+        CueKind.Heavy => $"{Slot}重击",
+        CueKind.AttackAfterSkill => $"{Slot}普攻{Count}",
+        _ => Text ?? string.Empty,
     };
 }
 
@@ -106,47 +201,60 @@ public enum ConditionKind
 
     /// <summary>Slot N's ultimate can be cast.</summary>
     UltimateReady,
+
+    /// <summary>Slot N's portrait leads the chain prompt: E would trigger N.</summary>
+    PromptLeads,
 }
 
 /// <summary>
-/// Something that must hold before a step should be taken. Conditions only ever
-/// refer to what the HUD readers can see.
+/// Something that must hold before a step should be taken, or a branch followed.
+/// Conditions only ever refer to what the HUD readers can see.
 ///
-/// Written "sp>=1", "chain:2", "ult:3".
+/// Written "sp>=1", "chain:2", "ult:3", "prompt:4".
 /// </summary>
 [JsonConverter(typeof(StepConditionJsonConverter))]
 public readonly record struct StepCondition(ConditionKind Kind, int Value)
 {
+    private static readonly (string Prefix, ConditionKind Kind)[] Prefixes =
+    [
+        ("sp>=", ConditionKind.SkillPoints),
+        ("chain:", ConditionKind.ChainReady),
+        ("ult:", ConditionKind.UltimateReady),
+        ("prompt:", ConditionKind.PromptLeads),
+    ];
+
     public bool IsValid => Kind switch
     {
         ConditionKind.SkillPoints => Value is >= 0 and <= 3,
-        ConditionKind.ChainReady or ConditionKind.UltimateReady => Value is >= RotationAction.MinSlot and <= RotationAction.MaxSlot,
+        ConditionKind.ChainReady or ConditionKind.UltimateReady or ConditionKind.PromptLeads =>
+            Value is >= RotationAction.MinSlot and <= RotationAction.MaxSlot,
         _ => false,
+    };
+
+    /// <summary>For people: "技能点 ≥ 1", "2 连携就绪", "连携提示 4 在前".</summary>
+    public string Description => Kind switch
+    {
+        ConditionKind.SkillPoints => $"技能点 ≥ {Value}",
+        ConditionKind.ChainReady => $"{Value} 连携就绪",
+        ConditionKind.UltimateReady => $"{Value} 大招就绪",
+        ConditionKind.PromptLeads => $"连携提示 {Value} 在前",
+        _ => ToString(),
     };
 
     public static StepCondition Parse(string text)
     {
         ReadOnlySpan<char> span = text.AsSpan().Trim();
 
-        if (span.StartsWith("sp>=", StringComparison.OrdinalIgnoreCase)
-            && int.TryParse(span[4..], NumberStyles.None, CultureInfo.InvariantCulture, out int points))
+        foreach ((string prefix, ConditionKind kind) in Prefixes)
         {
-            return new StepCondition(ConditionKind.SkillPoints, points);
+            if (span.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(span[prefix.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out int value))
+            {
+                return new StepCondition(kind, value);
+            }
         }
 
-        if (span.StartsWith("chain:", StringComparison.OrdinalIgnoreCase)
-            && int.TryParse(span[6..], NumberStyles.None, CultureInfo.InvariantCulture, out int chainSlot))
-        {
-            return new StepCondition(ConditionKind.ChainReady, chainSlot);
-        }
-
-        if (span.StartsWith("ult:", StringComparison.OrdinalIgnoreCase)
-            && int.TryParse(span[4..], NumberStyles.None, CultureInfo.InvariantCulture, out int ultimateSlot))
-        {
-            return new StepCondition(ConditionKind.UltimateReady, ultimateSlot);
-        }
-
-        throw new FormatException($"'{text}' is not a condition. Write sp>=N, chain:N or ult:N.");
+        throw new FormatException($"'{text}' is not a condition. Write sp>=N, chain:N, ult:N or prompt:N.");
     }
 
     public override string ToString() => Kind switch
@@ -154,57 +262,99 @@ public readonly record struct StepCondition(ConditionKind Kind, int Value)
         ConditionKind.SkillPoints => $"sp>={Value}",
         ConditionKind.ChainReady => $"chain:{Value}",
         ConditionKind.UltimateReady => $"ult:{Value}",
+        ConditionKind.PromptLeads => $"prompt:{Value}",
         _ => $"?{Value}",
     };
 }
 
-/// <summary>
-/// A step and what gates it. In JSON a step with no conditions is just its
-/// notation, "4E"; one with conditions is an object:
-/// <c>{ "do": "1重击", "when": ["sp>=1"], "note": "等 2 可放再重击" }</c>.
-/// </summary>
-[JsonConverter(typeof(RotationStepJsonConverter))]
-public sealed record RotationStep
+/// <summary>An alternative way out of a step, suggested while its conditions hold.</summary>
+public sealed record RotationBranch
 {
-    public required RotationAction Action { get; init; }
-
     public IReadOnlyList<StepCondition> When { get; init; } = [];
 
-    /// <summary>Shown to the player while a condition is unmet. Say what to wait for, not why.</summary>
+    /// <summary>The <see cref="RotationStep.Id"/> to go to.</summary>
+    public required string To { get; init; }
+
+    public bool Equals(RotationBranch? other) =>
+        other is not null && To == other.To && When.SequenceEqual(other.When);
+
+    public override int GetHashCode() => HashCode.Combine(To, When.Count);
+}
+
+/// <summary>A named run of steps, drawn as one lane: "开局", "循环".</summary>
+public sealed record RotationSegment(string Id, string Name);
+
+/// <summary>
+/// A state in the rotation: one input the HUD can confirm, the soft cues that
+/// lead into it, what must hold before it, and where to go next.
+///
+/// Where to go: <see cref="Next"/> when given; otherwise the following step if it
+/// is in the same segment; otherwise back to the rotation's first step as a new
+/// round. <see cref="Branches"/> add alternatives. Which way the overlay suggests
+/// comes from the branch conditions; which way the tracker goes comes from which
+/// successor's input it actually sees.
+/// </summary>
+public sealed record RotationStep
+{
+    public required string Id { get; init; }
+
+    /// <summary>The <see cref="RotationSegment.Id"/> this step is drawn in.</summary>
+    public string? Segment { get; init; }
+
+    [JsonPropertyName("do")]
+    public required RotationAction Action { get; init; }
+
+    /// <summary>Soft cues, in order, shown ahead of the action.</summary>
+    public IReadOnlyList<SoftCue> Before { get; init; } = [];
+
+    /// <summary>Conditions for doing this step at all -- including its cues.</summary>
+    public IReadOnlyList<StepCondition> When { get; init; } = [];
+
+    public string? Next { get; init; }
+
+    /// <summary>Following <see cref="Next"/> starts a new round.</summary>
+    public bool NewRound { get; init; }
+
+    public IReadOnlyList<RotationBranch> Branches { get; init; } = [];
+
+    /// <summary>Shown to the player with the step. Say what to watch for, not why.</summary>
     public string? Note { get; init; }
 
-    public static implicit operator RotationStep(string notation) => new() { Action = RotationAction.Parse(notation) };
-
     public bool Equals(RotationStep? other) =>
-        other is not null && Action == other.Action && Note == other.Note && When.SequenceEqual(other.When);
+        other is not null
+        && Id == other.Id
+        && Segment == other.Segment
+        && Action == other.Action
+        && Next == other.Next
+        && NewRound == other.NewRound
+        && Note == other.Note
+        && Before.SequenceEqual(other.Before)
+        && When.SequenceEqual(other.When)
+        && Branches.SequenceEqual(other.Branches);
 
-    public override int GetHashCode()
+    public override int GetHashCode() => HashCode.Combine(Id, Action, Next);
+
+    public override string ToString()
     {
-        var hash = default(HashCode);
-        hash.Add(Action);
-        hash.Add(Note);
-        foreach (StepCondition condition in When)
-        {
-            hash.Add(condition);
-        }
-
-        return hash.ToHashCode();
+        string cues = Before.Count == 0 ? string.Empty : $"~{string.Join(" ~", Before)} ";
+        return When.Count == 0 ? $"{cues}{Action}" : $"{cues}{Action} [{string.Join(", ", When)}]";
     }
+}
 
-    public override string ToString() =>
-        When.Count == 0 ? Action.ToString() : $"{Action} [{string.Join(", ", When)}]";
+/// <summary>A way out of a step, resolved to an index into <see cref="Rotation.Steps"/>.</summary>
+public readonly record struct RotationEdge(int To, bool NewRound, IReadOnlyList<StepCondition> When)
+{
+    public bool IsDefault => When.Count == 0;
 }
 
 /// <summary>
-/// A team's rotation: an opening played once at the start of a fight, then a
-/// cycle that repeats until the fight ends. Rounds can differ only in their
-/// conditions, which is exactly what the cycle is for -- the example team plays
-/// the same eight inputs every round, but from round two its heavy attack has to
-/// wait for a skill point.
+/// A team's rotation, as a state machine over steps. The first step is where a
+/// fight starts. The example team plays an opening once and then a cycle that
+/// differs only in one condition; that is two segments and a "new round" edge.
 /// </summary>
 public sealed record Rotation
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
@@ -220,40 +370,171 @@ public sealed record Rotation
 
     public string? Notes { get; init; }
 
-    public IReadOnlyList<RotationStep> Opening { get; init; } = [];
+    public IReadOnlyList<RotationSegment> Segments { get; init; } = [];
 
-    public IReadOnlyList<RotationStep> Cycle { get; init; } = [];
+    public IReadOnlyList<RotationStep> Steps { get; init; } = [];
+
+    public int IndexOf(string id)
+    {
+        for (int i = 0; i < Steps.Count; i++)
+        {
+            if (Steps[i].Id == id)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>Where step <paramref name="index"/> goes when no branch is taken.</summary>
+    public RotationEdge DefaultEdge(int index)
+    {
+        RotationStep step = Steps[index];
+        if (step.Next is not null)
+        {
+            int target = IndexOf(step.Next);
+            if (target >= 0)
+            {
+                return new RotationEdge(target, step.NewRound, []);
+            }
+        }
+
+        return index + 1 < Steps.Count && Steps[index + 1].Segment == step.Segment
+            ? new RotationEdge(index + 1, false, [])
+            : new RotationEdge(0, true, []);
+    }
+
+    /// <summary>Every way out of step <paramref name="index"/>: branches first, in order, then the default.</summary>
+    public IEnumerable<RotationEdge> Edges(int index)
+    {
+        foreach (RotationBranch branch in Steps[index].Branches)
+        {
+            int target = IndexOf(branch.To);
+            if (target >= 0)
+            {
+                yield return new RotationEdge(target, false, branch.When);
+            }
+        }
+
+        yield return DefaultEdge(index);
+    }
+
+    public string SegmentName(int index)
+    {
+        string? id = Steps[index].Segment;
+        return Segments.FirstOrDefault(s => s.Id == id)?.Name ?? string.Empty;
+    }
+
+    /// <summary>The steps drawn in the same lane as step <paramref name="index"/>, in order.</summary>
+    public IReadOnlyList<int> SegmentSteps(int index)
+    {
+        string? id = Steps[index].Segment;
+        return [.. Enumerable.Range(0, Steps.Count).Where(i => Steps[i].Segment == id)];
+    }
 
     public bool Equals(Rotation? other) =>
-        other is not null &&
-        SchemaVersion == other.SchemaVersion &&
-        Id == other.Id &&
-        DisplayName == other.DisplayName &&
-        ProfileId == other.ProfileId &&
-        ControlledSlot == other.ControlledSlot &&
-        Notes == other.Notes &&
-        Opening.SequenceEqual(other.Opening) &&
-        Cycle.SequenceEqual(other.Cycle);
+        other is not null
+        && SchemaVersion == other.SchemaVersion
+        && Id == other.Id
+        && DisplayName == other.DisplayName
+        && ProfileId == other.ProfileId
+        && ControlledSlot == other.ControlledSlot
+        && Notes == other.Notes
+        && Segments.SequenceEqual(other.Segments)
+        && Steps.SequenceEqual(other.Steps);
 
-    public override int GetHashCode() => HashCode.Combine(Id, ProfileId, Opening.Count, Cycle.Count);
+    public override int GetHashCode() => HashCode.Combine(Id, Steps.Count);
+}
+
+internal static class Notation
+{
+    /// <summary>Splits "3普攻2" into 3 and "普攻2". The slot is a single digit 1-4.</summary>
+    public static bool TrySplitSlot(string? text, out int slot, out ReadOnlySpan<char> suffix)
+    {
+        slot = 0;
+        suffix = default;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> span = text.AsSpan().Trim();
+        if (span.Length == 0 || span[0] is < '1' or > '4')
+        {
+            return false;
+        }
+
+        slot = span[0] - '0';
+        suffix = span[1..].Trim();
+        return true;
+    }
 }
 
 internal sealed class RotationActionJsonConverter : JsonConverter<RotationAction>
 {
     public override RotationAction Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        try
-        {
-            return RotationAction.Parse(reader.GetString() ?? string.Empty);
-        }
-        catch (FormatException ex)
-        {
-            throw new JsonException(ex.Message, ex);
-        }
+        string text = reader.GetString() ?? string.Empty;
+        return RotationAction.TryParse(text, out RotationAction action)
+            ? action
+            : throw new JsonException(
+                SoftCue.TryParse(text, out _)
+                    ? $"'{text}' cannot be seen on screen, so it is not a step; put it in \"before\" of the step it leads into."
+                    : $"'{text}' is not a rotation step. Write N, NE or N大招 with N in 1-4.");
     }
 
     public override void Write(Utf8JsonWriter writer, RotationAction value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value.ToString());
+}
+
+internal sealed class SoftCueJsonConverter : JsonConverter<SoftCue>
+{
+    public override SoftCue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            string text = reader.GetString() ?? string.Empty;
+            return SoftCue.TryParse(text, out SoftCue cue)
+                ? cue
+                : throw new JsonException($"'{text}' is not a cue. Write N重击 or N普攻K, or {{ \"text\": \"…\" }} for anything else.");
+        }
+
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            throw new JsonException("a cue is a string like \"1重击\" or an object with \"text\".");
+        }
+
+        string? said = null;
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            string property = reader.GetString() ?? string.Empty;
+            reader.Read();
+            if (property.Equals("text", StringComparison.OrdinalIgnoreCase))
+            {
+                said = reader.GetString();
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+
+        return SoftCue.Say(said ?? throw new JsonException("a cue object needs \"text\"."));
+    }
+
+    public override void Write(Utf8JsonWriter writer, SoftCue value, JsonSerializerOptions options)
+    {
+        if (value.Kind != CueKind.Text)
+        {
+            writer.WriteStringValue(value.ToString());
+            return;
+        }
+
+        writer.WriteStartObject();
+        writer.WriteString("text", value.Text);
+        writer.WriteEndObject();
+    }
 }
 
 internal sealed class StepConditionJsonConverter : JsonConverter<StepCondition>
@@ -272,89 +553,4 @@ internal sealed class StepConditionJsonConverter : JsonConverter<StepCondition>
 
     public override void Write(Utf8JsonWriter writer, StepCondition value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value.ToString());
-}
-
-internal sealed class RotationStepJsonConverter : JsonConverter<RotationStep>
-{
-    public override RotationStep Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType == JsonTokenType.String)
-        {
-            try
-            {
-                return new RotationStep { Action = RotationAction.Parse(reader.GetString()!) };
-            }
-            catch (FormatException ex)
-            {
-                throw new JsonException(ex.Message, ex);
-            }
-        }
-
-        if (reader.TokenType != JsonTokenType.StartObject)
-        {
-            throw new JsonException("a rotation step is either a string like \"4E\" or an object with \"do\".");
-        }
-
-        RotationAction? action = null;
-        var when = new List<StepCondition>();
-        string? note = null;
-
-        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-        {
-            string property = reader.GetString() ?? string.Empty;
-            reader.Read();
-
-            switch (property.ToLowerInvariant())
-            {
-                case "do":
-                    action = JsonSerializer.Deserialize<RotationAction>(ref reader, options);
-                    break;
-                case "when":
-                    when.AddRange(JsonSerializer.Deserialize<List<StepCondition>>(ref reader, options) ?? []);
-                    break;
-                case "note":
-                    note = reader.GetString();
-                    break;
-                default:
-                    reader.Skip();
-                    break;
-            }
-        }
-
-        return new RotationStep
-        {
-            Action = action ?? throw new JsonException("a rotation step object needs \"do\"."),
-            When = when,
-            Note = note,
-        };
-    }
-
-    public override void Write(Utf8JsonWriter writer, RotationStep value, JsonSerializerOptions options)
-    {
-        if (value.When.Count == 0 && value.Note is null)
-        {
-            writer.WriteStringValue(value.Action.ToString());
-            return;
-        }
-
-        writer.WriteStartObject();
-        writer.WriteString("do", value.Action.ToString());
-        if (value.When.Count > 0)
-        {
-            writer.WriteStartArray("when");
-            foreach (StepCondition condition in value.When)
-            {
-                writer.WriteStringValue(condition.ToString());
-            }
-
-            writer.WriteEndArray();
-        }
-
-        if (value.Note is not null)
-        {
-            writer.WriteString("note", value.Note);
-        }
-
-        writer.WriteEndObject();
-    }
 }

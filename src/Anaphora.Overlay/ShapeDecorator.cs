@@ -24,12 +24,15 @@ public sealed class ShapeDecorator : Decorator
     public static readonly StyledProperty<IBrush?> StrokeProperty =
         AvaloniaProperty.Register<ShapeDecorator, IBrush?>(nameof(Stroke));
 
+    public static readonly StyledProperty<bool> DashedProperty =
+        AvaloniaProperty.Register<ShapeDecorator, bool>(nameof(Dashed));
+
     public static readonly StyledProperty<double> StrokeThicknessProperty =
         AvaloniaProperty.Register<ShapeDecorator, double>(nameof(StrokeThickness), 1);
 
     static ShapeDecorator()
     {
-        AffectsRender<ShapeDecorator>(SlantProperty, ChamferProperty, FillProperty, StrokeProperty, StrokeThicknessProperty);
+        AffectsRender<ShapeDecorator>(SlantProperty, ChamferProperty, FillProperty, StrokeProperty, StrokeThicknessProperty, DashedProperty);
     }
 
     /// <summary>Horizontal offset of the top edge against the bottom edge, in DIPs.</summary>
@@ -56,6 +59,13 @@ public sealed class ShapeDecorator : Decorator
     {
         get => GetValue(StrokeProperty);
         set => SetValue(StrokeProperty, value);
+    }
+
+    /// <summary>Draws the outline dashed: the mark of something nothing on screen confirms.</summary>
+    public bool Dashed
+    {
+        get => GetValue(DashedProperty);
+        set => SetValue(DashedProperty, value);
     }
 
     public double StrokeThickness
@@ -105,6 +115,8 @@ public sealed class ShapeDecorator : Decorator
             path.EndFigure(isClosed: true);
         }
 
-        context.DrawGeometry(Fill, Stroke is null ? null : new Pen(Stroke, StrokeThickness), geometry);
+        // Dashes are sized in stroke widths, so they scale with the outline.
+        IPen? pen = Stroke is null ? null : new Pen(Stroke, StrokeThickness, Dashed ? new DashStyle([3, 2], 0) : null);
+        context.DrawGeometry(Fill, pen, geometry);
     }
 }
