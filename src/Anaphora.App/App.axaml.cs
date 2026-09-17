@@ -1,3 +1,4 @@
+using Anaphora.App.Editor;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -10,6 +11,7 @@ namespace Anaphora.App;
 public partial class App : Application
 {
     private AnaphoraHost? host;
+    private MainWindow? window;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -21,9 +23,14 @@ public partial class App : Application
 
             try
             {
-                host = new AnaphoraHost(AppOptions.Current, AppSettings.Load());
+                var library = new RotationLibrary();
+                library.Seed(Path.Combine(AppContext.BaseDirectory, "rotations"));
+
+                host = new AnaphoraHost(AppOptions.Current, AppSettings.Load(), library);
                 host.Start();
+                window = new MainWindow(new MainViewModel(host));
                 TrayIcon.SetIcons(this, [BuildTray(host, desktop)]);
+                window.Show();
             }
             catch (Exception ex)
             {
@@ -37,42 +44,72 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    /// <summary>
-    /// The only controls there are until the configuration window is designed.
-    /// The overlay itself ignores the mouse, so folding the status panel has to
-    /// live somewhere else, and the tray is the one place that needs no design pass.
-    /// </summary>
-    private static TrayIcon BuildTray(AnaphoraHost host, IClassicDesktopStyleApplicationLifetime desktop)
+    private void ShowWindow()
     {
-        var status = new NativeMenuItem("显示状态面板")
+        if (window is null)
         {
-            ToggleType = MenuItemToggleType.CheckBox,
-            IsChecked = host.StatusVisible,
-        };
-        status.Click += (_, _) => status.IsChecked = host.ToggleStatus();
+            return;
+        }
 
-        var hide = new NativeMenuItem("读不到 HUD 时隐藏")
+        window.Show();
+        if (window.WindowState == WindowState.Minimized)
         {
-            ToggleType = MenuItemToggleType.CheckBox,
-            IsChecked = host.HideWhenHudAbsent,
-        };
-        hide.Click += (_, _) => hide.IsChecked = host.ToggleHideWhenHudAbsent();
+            window.WindowState = WindowState.Normal;
+        }
 
-        var reset = new NativeMenuItem(host.ResetHotkeyText is { } hotkey ? $"轴回到开头（{hotkey}）" : "轴回到开头");
+        window.Activate();
+    }
+
+    /// <summary>
+    /// Quick controls that work without opening the main window. The overlay
+    /// itself ignores the mouse, so these have to live somewhere else.
+    /// </summary>
+    private TrayIcon BuildTray(AnaphoraHost host, IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var open = new NativeMenuItem("打开主界面");
+        open.Click += (_, _) => ShowWindow();
+
+        var status = new NativeMenuItem("显示状态面板") { ToggleType = MenuItemToggleType.CheckBox };
+        status.Click += (_, _) => host.UpdateSettings(host.Settings with { StatusVisible = !host.Settings.StatusVisible });
+
+        var hide = new NativeMenuItem("读不到 HUD 时隐藏") { ToggleType = MenuItemToggleType.CheckBox };
+        hide.Click += (_, _) => host.UpdateSettings(host.Settings with { HideWhenHudAbsent = !host.Settings.HideWhenHudAbsent });
+
+        var reset = new NativeMenuItem();
         reset.Click += (_, _) => host.ResetRotation();
 
         var skip = new NativeMenuItem("跳过当前一步");
         skip.Click += (_, _) => host.SkipStep();
 
         var exit = new NativeMenuItem("退出");
-        exit.Click += (_, _) => desktop.Shutdown();
+        exit.Click += (_, _) =>
+        {
+            if (window is not null)
+            {
+                window.ReallyClose = true;
+            }
 
-        return new TrayIcon
+            desktop.Shutdown();
+        };
+
+        void Sync()
+        {
+            status.IsChecked = host.Settings.StatusVisible;
+            hide.IsChecked = host.Settings.HideWhenHudAbsent;
+            reset.Header = host.ResetHotkeyText is { } hotkey ? $"轴回到开头（{hotkey}）" : "轴回到开头";
+        }
+
+        Sync();
+        host.SettingsChanged += Sync;
+
+        var tray = new TrayIcon
         {
             Icon = DrawIcon(),
             ToolTipText = "Anaphora",
-            Menu = [status, hide, new NativeMenuItemSeparator(), reset, skip, new NativeMenuItemSeparator(), exit],
+            Menu = [open, new NativeMenuItemSeparator(), status, hide, new NativeMenuItemSeparator(), reset, skip, new NativeMenuItemSeparator(), exit],
         };
+        tray.Clicked += (_, _) => ShowWindow();
+        return tray;
     }
 
     /// <summary>An amber diamond, drawn rather than shipped: there is no icon artwork yet.</summary>

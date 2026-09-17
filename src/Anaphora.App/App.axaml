@@ -2,7 +2,44 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Anaphora.App.App"
              RequestedThemeVariant="Dark">
+
+  <!-- The game's palette, shared by the main window. The overlay keeps its own
+       copy so it can be swapped out without touching this. -->
+  <Application.Resources>
+    <SolidColorBrush x:Key="Ground" Color="#0A0B0B" />
+    <SolidColorBrush x:Key="Panel" Color="#121414" />
+    <SolidColorBrush x:Key="Card" Color="#181B1B" />
+    <SolidColorBrush x:Key="Line" Color="#34383A" />
+    <SolidColorBrush x:Key="LineSoft" Color="#232627" />
+    <SolidColorBrush x:Key="Text" Color="#ECEBE6" />
+    <SolidColorBrush x:Key="Muted" Color="#8A8E8F" />
+    <SolidColorBrush x:Key="Dim" Color="#5E6263" />
+    <SolidColorBrush x:Key="Amber" Color="#F0B429" />
+    <SolidColorBrush x:Key="Cyan" Color="#19C3F0" />
+    <SolidColorBrush x:Key="Lime" Color="#B8D433" />
+    <SolidColorBrush x:Key="Warn" Color="#E5484D" />
+    <FontFamily x:Key="Display">Bahnschrift SemiCondensed, Bahnschrift, Microsoft YaHei UI</FontFamily>
+    <FontFamily x:Key="Body">Microsoft YaHei UI, Segoe UI</FontFamily>
+    <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Microsoft YaHei UI</FontFamily>
+    <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+    <CornerRadius x:Key="OverlayCornerRadius">0</CornerRadius>
+  </Application.Resources>
+
   <Application.Styles>
-    <FluentTheme />
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark"
+                               Accent="#F0B429"
+                               RegionColor="#121414"
+                               AltHigh="#0A0B0B"
+                               ChromeMediumLow="#0A0B0B"
+                               ChromeLow="#181B1B"
+                               ChromeMedium="#202323"
+                               ChromeHigh="#34383A"
+                               BaseHigh="#ECEBE6"
+                               BaseMedium="#8A8E8F"
+                               BaseLow="#34383A" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
   </Application.Styles>
 </Application>

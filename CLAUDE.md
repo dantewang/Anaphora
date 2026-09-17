@@ -51,9 +51,11 @@ src/Anaphora.Overlay    Avalonia 透明置顶穿透窗口，跟随游戏窗口
 src/Anaphora.App        入口 + 配置界面（选窗口、标 ROI、调阈值、实时预览）
 tests/Anaphora.Analysis.Tests
 tests/Anaphora.Core.Tests
+tests/Anaphora.App.Tests      主界面编辑器的文档模型（RotationDocument）、快捷键解析
 tests/Anaphora.Analysis.Tests/fixtures  连拍帧的遮罩版：只留 HUD，其余涂黑，可进仓库
 tools/Anaphora.CaptureProbe  一次性可行性探针：WGC 能不能拿到这个游戏的真实像素
 profiles/               每个游戏一个 JSON：窗口匹配、ROI 定义、阈值、头像哈希
+rotations/              随程序发的轴（示例队伍、分支演示），首次运行复制进用户的轴库
 ```
 
 单进程、两个窗口。Capture 与 Overlay 共享一个进程，不做 IPC。
@@ -114,7 +116,22 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
   扩展样式用 `GetWindowLong`/`SetWindowLong` 即可。
 - **截图验证 overlay 时要用带 `CAPTUREBLT` 的 `BitBlt`**；`Graphics.CopyFromScreen` 截不到
   分层窗口，会让人误以为 overlay 没显示。
-- 在还没有配置界面之前，状态面板折叠、读不到 HUD 时隐藏、轴回到开头、跳过一步、退出都在**托盘菜单**里。
+- **主界面**（`src/Anaphora.App/Editor`，视觉稿在 artifact「Anaphora 轴编辑器」）：左轴库、中间状态机图
+  （`RotationGraph` 自绘：每段一条泳道，软提示叠在卡片上方、等待条件在下方，箭头画去向/分支/下一轮）、
+  下方快速输入、右边步骤属性和 overlay 预览；另有设定页。启动时打开，关窗只是隐藏，托盘可再打开。
+  托盘仍保留状态面板、隐藏、轴回到开头、跳过一步、退出这些快捷开关，和设定页双向同步。
+- **轴库**在 `%LOCALAPPDATA%\Anaphora\rotations\<id>.json`，随程序发的轴缺哪个补哪个（不覆盖用户改过的）。
+  `settings.json` 的 `activeRotation` 是 overlay 跟的那条；`--rotation` 命令行参数优先。
+  导入（文件/剪贴板，id 冲突自动改名）、导出（文件/剪贴板）、复制、新建；改了没存的轴留在内存里，
+  保存时有错误就不写盘。正在使用的轴保存后 overlay 立即换成新版本。
+- 编辑器的文档模型是 Core 不可变记录的**可变镜像**（`RotationDocument`），任何改动触发 `Changed`；
+  撤销/重做是整份快照（Ctrl+Z / Ctrl+Y，200 步）。快速输入替换一段时按位置保留原步骤的 id、条件、
+  备注和分支，被删掉的步骤的引用改指这一段的第一步。
+- **Avalonia 下拉框的坑**：`ItemsSource` 整体换掉时它会清掉选中项并把 null 写回绑定。所以选项列表
+  尽量不换（文字固定的"不指定"项、文档维护的 `Options` 只在步骤名变化时刷新），源属性忽略 null，
+  刷新后再主动通知一次。`SelectedValue` + `SelectedValueBinding` 在这里没选中过，改用 `SelectedItem`。
+- 用 SendKeys 驱动界面测试时注意：`~` 是回车，中文输入法会把 `"` 变成中文引号。编辑逻辑靠
+  `Anaphora.App.Tests` 测，不靠模拟键盘。
   状态面板开关记在 `%LOCALAPPDATA%\Anaphora\settings.json`，日志在同目录 `app.log`。
 - Overlay 的渲染实现必须放在接口后面。若 Avalonia 的透明窗口出现 artifact 或性能问题，
   退路是手写 `WS_EX_NOREDIRECTIONBITMAP` + DirectComposition + Direct2D 窗口，

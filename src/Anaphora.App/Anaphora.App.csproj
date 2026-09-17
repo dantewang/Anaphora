@@ -20,6 +20,10 @@
     <AvaloniaResource Include="Assets/**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Anaphora.App.Tests" />
+  </ItemGroup>
+
   <!-- The shipped profile and rotations sit next to the executable. -->
   <ItemGroup>
     <None Include="../../profiles/*.json" Link="profiles/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

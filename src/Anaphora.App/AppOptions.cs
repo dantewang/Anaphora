@@ -7,7 +7,7 @@ namespace Anaphora.App;
 /// with no arguments the app finds the game from the profile and runs.
 ///
 ///   --profile PATH       a different profile (default profiles/endfield.json)
-///   --rotation PATH      a different rotation (default rotations/endfield-example.json)
+///   --rotation PATH      follow this rotation file instead of the library's active one
 ///   --process NAME       capture this process instead of the profile's -- any window
 ///                        will do for checking the overlay mechanics without the game
 ///   --any-foreground     show the overlay even when the captured window is not in front
@@ -19,7 +19,8 @@ internal sealed record AppOptions
 
     public string ProfilePath { get; init; } = Path.Combine(AppContext.BaseDirectory, "profiles", "endfield.json");
 
-    public string RotationPath { get; init; } = Path.Combine(AppContext.BaseDirectory, "rotations", "endfield-example.json");
+    /// <summary>Follow this file instead of the library's active rotation.</summary>
+    public string? RotationPath { get; init; }
 
     public string? ProcessName { get; init; }
 
@@ -37,7 +38,7 @@ internal sealed record AppOptions
             options = args[i] switch
             {
                 "--profile" => options with { ProfilePath = Path.GetFullPath(Next() ?? options.ProfilePath) },
-                "--rotation" => options with { RotationPath = Path.GetFullPath(Next() ?? options.RotationPath) },
+                "--rotation" => options with { RotationPath = Next() is { } rotation ? Path.GetFullPath(rotation) : null },
                 "--process" => options with { ProcessName = Next() },
                 "--any-foreground" => options with { RequireForeground = false },
                 "--rate" => options with

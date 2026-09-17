@@ -25,6 +25,9 @@ internal sealed record AppSettings
     /// <summary>Sends the rotation back to its start. Empty turns the hotkey off.</summary>
     public string? ResetHotkey { get; init; } = "Ctrl+Alt+R";
 
+    /// <summary>The id of the library rotation the overlay follows.</summary>
+    public string ActiveRotation { get; init; } = "endfield-example";
+
     public static AppSettings Load()
     {
         try

@@ -1,0 +1,808 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ed="clr-namespace:Anaphora.App.Editor"
+        xmlns:ov="clr-namespace:Anaphora.Overlay;assembly=Anaphora.Overlay"
+        x:Class="Anaphora.App.Editor.MainWindow"
+        x:DataType="ed:MainViewModel"
+        Title="Anaphora"
+        Width="1480" Height="920" MinWidth="1100" MinHeight="680"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Panel}"
+        FontFamily="{StaticResource Body}"
+        FontSize="13">
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}" />
+    <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+Z" Command="{Binding RedoCommand}" />
+  </Window.KeyBindings>
+
+  <!-- Follows the approved mockup (scratchpad main/index.html): the game's dark
+       ground, amber for "this one", cyan for chains, lime dashes for soft cues. -->
+  <Window.Resources>
+    <ed:IntEqualsConverter x:Key="IsInt" />
+
+    <DataTemplate x:Key="PreviewChip" x:DataType="ov:StepChip">
+      <StackPanel Orientation="Horizontal" Spacing="5">
+        <ov:ShapeDecorator Classes="chip"
+                           Classes.chain="{Binding IsChain}"
+                           Classes.cue="{Binding IsCue}"
+                           Classes.ult="{Binding IsUltimate}">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+            <TextBlock Classes="badge" Text="{Binding Badge}" IsVisible="{Binding HasBadge}" />
+            <TextBlock Classes="main" Text="{Binding Main}" />
+          </StackPanel>
+        </ov:ShapeDecorator>
+        <TextBlock Classes="then" Text="›" IsVisible="{Binding IsCue}" />
+      </StackPanel>
+    </DataTemplate>
+  </Window.Resources>
+
+  <Window.Styles>
+    <Style Selector="TextBlock.h">
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="LetterSpacing" Value="1.6" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.dim">
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- tabs in the title strip -->
+    <Style Selector="RadioButton.tab">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="18,0" VerticalAlignment="Center">
+              <TextBlock Text="{TemplateBinding Content}" FontFamily="{StaticResource Display}" FontWeight="Medium"
+                         FontSize="14" LetterSpacing="1" Foreground="{TemplateBinding Foreground}" />
+              <TextBlock Text="{TemplateBinding Tag}" FontSize="12" Foreground="{TemplateBinding Foreground}" />
+            </StackPanel>
+            <Border Name="bar" Height="2" Margin="14,0" VerticalAlignment="Bottom" Background="{StaticResource Amber}" IsVisible="False" />
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="RadioButton.tab:checked">
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+    </Style>
+    <Style Selector="RadioButton.tab:checked /template/ Border#bar">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <!-- segmented choices: slots, kinds -->
+    <Style Selector="RadioButton.seg">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="box" Background="Transparent" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                  MinWidth="32" Padding="10,4" Margin="0,0,-1,0">
+            <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center"
+                       FontFamily="{StaticResource Display}" FontWeight="SemiBold" FontSize="13"
+                       Foreground="{TemplateBinding Foreground}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="RadioButton.seg:pointerover /template/ Border#box">
+      <Setter Property="BorderBrush" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="RadioButton.seg:checked /template/ Border#box">
+      <Setter Property="Background" Value="{StaticResource Text}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Text}" />
+    </Style>
+    <Style Selector="RadioButton.seg:checked">
+      <Setter Property="Foreground" Value="#111111" />
+    </Style>
+
+    <!-- buttons: flat, one cut corner -->
+    <Style Selector="Button">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel>
+            <ov:ShapeDecorator Name="shape" Chamfer="6" Fill="{TemplateBinding Background}"
+                               Stroke="{TemplateBinding BorderBrush}" />
+            <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}"
+                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                              Foreground="{TemplateBinding Foreground}" />
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+      <Setter Property="Background" Value="{StaticResource Card}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Padding" Value="11,6" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button:pointerover">
+      <Setter Property="BorderBrush" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="Button:disabled">
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource Amber}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+      <Setter Property="Foreground" Value="#111111" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.add">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel Background="Transparent">
+            <ov:ShapeDecorator Stroke="{StaticResource Line}" Dashed="True" />
+            <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}"
+                              Foreground="{TemplateBinding Foreground}" />
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.add:pointerover">
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+    </Style>
+    <Style Selector="Button.x">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <TextBlock Text="×" FontSize="16" Foreground="{TemplateBinding Foreground}" Background="Transparent"
+                     Padding="4,0" VerticalAlignment="Center" />
+        </ControlTemplate>
+      </Setter>
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="Button.x:pointerover">
+      <Setter Property="Foreground" Value="{StaticResource Warn}" />
+    </Style>
+
+    <!-- inputs -->
+    <Style Selector="TextBox, ComboBox">
+      <Setter Property="Background" Value="{StaticResource Ground}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="FontSize" Value="12.5" />
+    </Style>
+    <Style Selector="ComboBox.mini">
+      <Setter Property="MinWidth" Value="56" />
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="MinHeight" Value="24" />
+    </Style>
+    <Style Selector="TextBox.title">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="20" />
+      <Setter Property="Padding" Value="0,2" />
+    </Style>
+    <Style Selector="TextBox.title:pointerover /template/ Border, TextBox.title:focus /template/ Border">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+    </Style>
+    <Style Selector="TextBox.mono">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+    </Style>
+
+    <!-- inspector groups and list rows -->
+    <Style Selector="StackPanel.group">
+      <Setter Property="Margin" Value="16,12,16,14" />
+      <Setter Property="Spacing" Value="8" />
+    </Style>
+    <Style Selector="Border.item">
+      <Setter Property="Background" Value="{StaticResource Card}" />
+      <Setter Property="BorderThickness" Value="2,0,0,0" />
+      <Setter Property="Padding" Value="8,5" />
+    </Style>
+    <Style Selector="Border.item.cue">
+      <Setter Property="BorderBrush" Value="{StaticResource Lime}" />
+    </Style>
+    <Style Selector="Border.item.wait">
+      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+    </Style>
+    <Style Selector="Border.item.edge">
+      <Setter Property="BorderBrush" Value="{StaticResource Cyan}" />
+    </Style>
+    <Style Selector="Border.rule">
+      <Setter Property="Height" Value="1" />
+      <Setter Property="Background" Value="{StaticResource LineSoft}" />
+    </Style>
+
+    <!-- library rows -->
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="8,2" />
+    </Style>
+    <Style Selector="ListBoxItem /template/ ContentPresenter">
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Card}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.accent">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="Border.slot">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Height" Value="16" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+    </Style>
+    <Style Selector="Border.slot TextBlock">
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.slot.on">
+      <Setter Property="BorderBrush" Value="{StaticResource Text}" />
+    </Style>
+    <Style Selector="Border.slot.on TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+    </Style>
+
+    <!-- overlay preview chips, as the overlay draws them -->
+    <Style Selector="ov|ShapeDecorator.chip">
+      <Setter Property="Slant" Value="7" />
+      <Setter Property="Fill" Value="{StaticResource Text}" />
+      <Setter Property="Height" Value="36" />
+      <Setter Property="MinWidth" Value="40" />
+      <Setter Property="Padding" Value="12,0" />
+    </Style>
+    <Style Selector="ov|ShapeDecorator.chip TextBlock.main">
+      <Setter Property="FontFamily" Value="{StaticResource Display}" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="Foreground" Value="#111111" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ov|ShapeDecorator.chip TextBlock.badge">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#4A4A48" />
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+      <Setter Property="Margin" Value="0,0,0,7" />
+    </Style>
+    <Style Selector="ov|ShapeDecorator.chip.chain">
+      <Setter Property="Fill" Value="{StaticResource Cyan}" />
+    </Style>
+    <Style Selector="ov|ShapeDecorator.chip.ult">
+      <Setter Property="Fill" Value="{StaticResource Amber}" />
+    </Style>
+    <Style Selector="ov|ShapeDecorator.chip.cue">
+      <Setter Property="Fill" Value="#0FB8D433" />
+      <Setter Property="Stroke" Value="{StaticResource Lime}" />
+      <Setter Property="Dashed" Value="True" />
+    </Style>
+    <Style Selector="ov|ShapeDecorator.chip.cue TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Lime}" />
+      <Setter Property="FontFamily" Value="{StaticResource Body}" />
+    </Style>
+    <Style Selector="ov|ShapeDecorator.chip.cue TextBlock.main">
+      <Setter Property="FontSize" Value="17" />
+    </Style>
+    <Style Selector="ItemsControl.next ov|ShapeDecorator.chip">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinWidth" Value="28" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="Fill" Value="Transparent" />
+      <Setter Property="Stroke" Value="#33ECEBE6" />
+    </Style>
+    <Style Selector="ItemsControl.next ov|ShapeDecorator.chip TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+    </Style>
+    <Style Selector="ItemsControl.next ov|ShapeDecorator.chip.cue">
+      <Setter Property="Stroke" Value="#99B8D433" />
+    </Style>
+    <Style Selector="ItemsControl.next ov|ShapeDecorator.chip.cue TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Lime}" />
+    </Style>
+    <Style Selector="ItemsControl.next ov|ShapeDecorator.chip TextBlock.main">
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="ItemsControl.next ov|ShapeDecorator.chip TextBlock.badge">
+      <Setter Property="FontSize" Value="9" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+    </Style>
+    <Style Selector="TextBlock.then">
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ItemsControl.next TextBlock.then">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <!-- settings cards -->
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{StaticResource Card}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="16,14" />
+      <Setter Property="Width" Value="380" />
+      <Setter Property="Margin" Value="0,0,18,18" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="44,*">
+
+    <!-- title strip -->
+    <Grid ColumnDefinitions="Auto,Auto,*,Auto" Background="{StaticResource Ground}">
+      <ov:ShapeDecorator Slant="0" Fill="{StaticResource Amber}" Padding="14,0,22,0">
+        <TextBlock Text="ANAPHORA" VerticalAlignment="Center" FontFamily="{StaticResource Display}"
+                   FontWeight="Bold" FontSize="12" LetterSpacing="2.4" Foreground="#111111" />
+      </ov:ShapeDecorator>
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <RadioButton x:Name="RotationTab" Classes="tab" GroupName="page" Content="ROTATION" Tag="轴" IsChecked="True" />
+        <RadioButton x:Name="SettingsTab" Classes="tab" GroupName="page" Content="SETTINGS" Tag="设定" />
+      </StackPanel>
+      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" Margin="16,0" VerticalAlignment="Center">
+        <TextBlock Classes="muted" Text="overlay 使用：" />
+        <TextBlock FontSize="12" Text="{Binding InUseName}" />
+      </StackPanel>
+      <Border Grid.ColumnSpan="4" Height="1" VerticalAlignment="Bottom" Background="{StaticResource Line}" />
+    </Grid>
+
+    <!-- rotation page -->
+    <Grid Grid.Row="1" ColumnDefinitions="250,*,340" IsVisible="{Binding #RotationTab.IsChecked}">
+
+      <!-- library -->
+      <Grid RowDefinitions="Auto,*,Auto">
+        <DockPanel Margin="14,14,14,10">
+          <TextBlock DockPanel.Dock="Right" Classes="muted" Text="{Binding Library.Count}" />
+          <TextBlock Classes="h" Text="LIBRARY  轴库" />
+        </DockPanel>
+        <ListBox Grid.Row="1" ItemsSource="{Binding Library}" SelectedItem="{Binding Selected}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="ed:LibraryItem">
+              <Panel>
+                <Border Classes="accent" Width="2" HorizontalAlignment="Left" Background="{StaticResource Amber}" IsVisible="False" />
+                <StackPanel Margin="12,9,10,9" Spacing="6">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Right" Background="{StaticResource Amber}" Padding="6,2" VerticalAlignment="Center"
+                            IsVisible="{Binding InUse}">
+                      <TextBlock Text="使用中" FontSize="10.5" FontWeight="Bold" Foreground="#111111" />
+                    </Border>
+                    <TextBlock DockPanel.Dock="Right" Text="●" Foreground="{StaticResource Amber}" Margin="0,0,6,0"
+                               FontSize="10" VerticalAlignment="Center" IsVisible="{Binding Dirty}" ToolTip.Tip="未保存" />
+                    <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                  </DockPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <ItemsControl ItemsSource="{Binding Slots}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" Spacing="3" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ed:SlotMark">
+                          <Border Classes="slot" Classes.on="{Binding Used}">
+                            <TextBlock Text="{Binding Slot}" />
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="muted" FontSize="11.5" Text="{Binding Summary}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </StackPanel>
+              </Panel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*" ColumnSpacing="6" Margin="12">
+          <Button Content="新建" Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />
+          <Button Grid.Column="1" Content="复制" Command="{Binding DuplicateCommand}" HorizontalAlignment="Stretch" />
+          <Button Grid.Column="2" Content="导入" HorizontalAlignment="Stretch">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="从文件…" Command="{Binding ImportFileCommand}" />
+                <MenuItem Header="从剪贴板" Command="{Binding ImportClipboardCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+          <Button Grid.Column="3" Content="导出" HorizontalAlignment="Stretch">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="存成文件…" Command="{Binding ExportFileCommand}" />
+                <MenuItem Header="复制到剪贴板" Command="{Binding CopyJsonCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+          <Border Grid.ColumnSpan="4" Height="1" Margin="-12,-12,-12,0" VerticalAlignment="Top" Background="{StaticResource LineSoft}" />
+        </Grid>
+        <Border Grid.RowSpan="3" Width="1" HorizontalAlignment="Right" Background="{StaticResource Line}" />
+      </Grid>
+
+      <!-- editor -->
+      <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*,Auto" IsVisible="{Binding HasSelection}">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="14" Margin="18,12">
+          <TextBox Classes="title" Text="{Binding Document.DisplayName}" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Classes="muted" Text="主控" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal">
+              <RadioButton Classes="seg" GroupName="controlled" Content="1"
+                           IsChecked="{Binding Document.ControlledSlot, Converter={StaticResource IsInt}, ConverterParameter=1}" />
+              <RadioButton Classes="seg" GroupName="controlled" Content="2"
+                           IsChecked="{Binding Document.ControlledSlot, Converter={StaticResource IsInt}, ConverterParameter=2}" />
+              <RadioButton Classes="seg" GroupName="controlled" Content="3"
+                           IsChecked="{Binding Document.ControlledSlot, Converter={StaticResource IsInt}, ConverterParameter=3}" />
+              <RadioButton Classes="seg" GroupName="controlled" Content="4"
+                           IsChecked="{Binding Document.ControlledSlot, Converter={StaticResource IsInt}, ConverterParameter=4}" />
+            </StackPanel>
+          </StackPanel>
+          <TextBlock Grid.Column="2" Text="● 未保存" Foreground="{StaticResource Amber}" FontSize="12"
+                     VerticalAlignment="Center" IsVisible="{Binding Selected.Dirty, FallbackValue=False}" />
+          <Button Grid.Column="3" Classes="ghost" Content="{Binding UseLabel}" Command="{Binding UseForOverlayCommand}"
+                  IsEnabled="{Binding !Selected.InUse, FallbackValue=False}" />
+          <Button Grid.Column="4" Classes="primary" Content="保存" Command="{Binding SaveCommand}" HotKey="Ctrl+S" MinWidth="72" />
+        </Grid>
+
+        <DockPanel Grid.Row="1" Margin="18,0,18,8">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+            <Button Classes="ghost" Content="撤销" Command="{Binding UndoCommand}" ToolTip.Tip="Ctrl+Z" />
+            <Button Classes="ghost" Content="重做" Command="{Binding RedoCommand}" ToolTip.Tip="Ctrl+Y" />
+            <Button Classes="ghost" Content="＋ 在后面插入" Command="{Binding InsertStepCommand}" />
+            <Button Classes="ghost" Content="⑂ 从这里分支" Command="{Binding BranchFromStepCommand}" />
+            <Button Classes="ghost" Content="删除这一步" Command="{Binding DeleteStepCommand}" />
+          </StackPanel>
+          <StackPanel Spacing="2" VerticalAlignment="Center">
+            <TextBlock Classes="muted" Text="{Binding Summary}" />
+            <TextBlock FontSize="12" Foreground="{StaticResource Amber}" Text="{Binding Status}"
+                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+        </DockPanel>
+
+        <Border Grid.Row="2" Margin="18,0,18,8" Padding="10,6" BorderBrush="{StaticResource Warn}" BorderThickness="2,0,0,0"
+                Background="#1AE5484D" IsVisible="{Binding HasProblems}">
+          <TextBlock Text="{Binding Problems}" FontSize="12" Foreground="{StaticResource Text}" TextWrapping="Wrap" />
+        </Border>
+
+        <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      Background="{StaticResource Ground}">
+          <ed:RotationGraph Document="{Binding Document}" SelectedStep="{Binding SelectedStep}"
+                            HorizontalAlignment="Left" VerticalAlignment="Top">
+            <ed:RotationGraph.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="在后面插入一步" Command="{Binding InsertStepCommand}" />
+                <MenuItem Header="从这里加一条分支" Command="{Binding BranchFromStepCommand}" />
+                <Separator />
+                <MenuItem Header="删除这一步" Command="{Binding DeleteStepCommand}" />
+              </ContextMenu>
+            </ed:RotationGraph.ContextMenu>
+          </ed:RotationGraph>
+        </ScrollViewer>
+
+        <Border Grid.Row="4" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="18,10,18,12">
+          <StackPanel Spacing="6">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Classes="dim" Text="只替换所选的一段；分支和条件在右边改" />
+              <TextBlock Classes="muted">
+                <Run Text="快速输入：空格或 → 分隔，" />
+                <Run Text="~" FontFamily="{StaticResource Mono}" Foreground="{StaticResource Text}" />
+                <Run Text=" 开头是软提示，" />
+                <Run Text="~1重击  ~3普攻2  ~&quot;文字&quot;" FontFamily="{StaticResource Mono}" Foreground="{StaticResource Text}" />
+              </TextBlock>
+            </DockPanel>
+            <Grid ColumnDefinitions="Auto,110,*,Auto" ColumnSpacing="8">
+              <ComboBox ItemsSource="{Binding Document.Segments}" SelectedItem="{Binding QuickSegment}" MinWidth="96" />
+              <TextBox Grid.Column="1" Text="{Binding QuickSegment.Name, FallbackValue=''}" PlaceholderText="段名" />
+              <TextBox Grid.Column="2" Classes="mono" Text="{Binding QuickText}">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding ApplyQuickCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+              <Button Grid.Column="3" Content="替换这一段" Command="{Binding ApplyQuickCommand}" />
+            </Grid>
+            <TextBlock FontSize="12" Foreground="{StaticResource Warn}" Text="{Binding QuickError}"
+                       IsVisible="{Binding QuickError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <!-- inspector -->
+      <Grid x:Name="Inspector" Grid.Column="2" RowDefinitions="*,Auto">
+        <Border Width="1" HorizontalAlignment="Left" Grid.RowSpan="2" Background="{StaticResource Line}" />
+        <ScrollViewer Margin="1,0,0,0" IsVisible="{Binding HasStep}">
+          <StackPanel>
+            <StackPanel Classes="group">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Text="识别到才前进" VerticalAlignment="Bottom" />
+                <TextBlock Classes="h" Text="{Binding StepTitle, StringFormat='STEP  {0}'}" />
+              </DockPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="muted" Text="槽位" Width="36" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal">
+                  <RadioButton Classes="seg" GroupName="slot" Content="1"
+                               IsChecked="{Binding SelectedStep.Slot, Converter={StaticResource IsInt}, ConverterParameter=1}" />
+                  <RadioButton Classes="seg" GroupName="slot" Content="2"
+                               IsChecked="{Binding SelectedStep.Slot, Converter={StaticResource IsInt}, ConverterParameter=2}" />
+                  <RadioButton Classes="seg" GroupName="slot" Content="3"
+                               IsChecked="{Binding SelectedStep.Slot, Converter={StaticResource IsInt}, ConverterParameter=3}" />
+                  <RadioButton Classes="seg" GroupName="slot" Content="4"
+                               IsChecked="{Binding SelectedStep.Slot, Converter={StaticResource IsInt}, ConverterParameter=4}" />
+                </StackPanel>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="muted" Text="类型" Width="36" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal">
+                  <RadioButton Classes="seg" GroupName="kind" Content="技能" IsChecked="{Binding SelectedStep.IsSkill}" />
+                  <RadioButton Classes="seg" GroupName="kind" Content="连携" IsChecked="{Binding SelectedStep.IsChain}" />
+                  <RadioButton Classes="seg" GroupName="kind" Content="大招" IsChecked="{Binding SelectedStep.IsUltimate}" />
+                </StackPanel>
+              </StackPanel>
+              <TextBlock Classes="muted" TextWrapping="Wrap">
+                <Run Text="玩家要做的：" />
+                <Run Text="{Binding SelectedStep.KeyText, FallbackValue=''}" Foreground="{StaticResource Text}" />
+              </TextBlock>
+            </StackPanel>
+            <Border Classes="rule" />
+
+            <StackPanel Classes="group">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Text="排在操作前，不检测" VerticalAlignment="Bottom" />
+                <TextBlock Classes="h" Text="SOFT  软提示" />
+              </DockPanel>
+              <ItemsControl ItemsSource="{Binding SelectedStep.Cues, FallbackValue={x:Null}}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ed:CueModel">
+                    <Border Classes="item cue">
+                      <DockPanel>
+                        <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除" />
+                        <Panel>
+                          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsHeavy}">
+                            <ComboBox Classes="mini" ItemsSource="{x:Static ed:ListItemModel.SlotChoices}" SelectedItem="{Binding Slot}" />
+                            <TextBlock Text="重击" VerticalAlignment="Center" />
+                          </StackPanel>
+                          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsAttack}">
+                            <ComboBox Classes="mini" ItemsSource="{x:Static ed:ListItemModel.SlotChoices}" SelectedItem="{Binding Slot}" />
+                            <TextBlock Text="技能后第" VerticalAlignment="Center" />
+                            <ComboBox Classes="mini" ItemsSource="{x:Static ed:ListItemModel.CountChoices}" SelectedItem="{Binding Count}" />
+                            <TextBlock Text="下普攻" VerticalAlignment="Center" />
+                          </StackPanel>
+                          <TextBox Text="{Binding Text}" IsVisible="{Binding IsText}" PlaceholderText="提示文字" />
+                        </Panel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <WrapPanel ItemSpacing="6" LineSpacing="6">
+                <Button Classes="add" Content="+ 重击" Command="{Binding SelectedStep.AddCueCommand, FallbackValue={x:Null}}" CommandParameter="heavy" />
+                <Button Classes="add" Content="+ 技能后第 K 下普攻" Command="{Binding SelectedStep.AddCueCommand, FallbackValue={x:Null}}" CommandParameter="attack" />
+                <Button Classes="add" Content="+ 自定义文字" Command="{Binding SelectedStep.AddCueCommand, FallbackValue={x:Null}}" CommandParameter="text" />
+              </WrapPanel>
+            </StackPanel>
+            <Border Classes="rule" />
+
+            <StackPanel Classes="group">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Text="全部满足才算可以做" VerticalAlignment="Bottom" />
+                <TextBlock Classes="h" Text="WAIT  等待条件" />
+              </DockPanel>
+              <ItemsControl ItemsSource="{Binding SelectedStep.Waits, FallbackValue={x:Null}}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ed:ConditionModel">
+                    <Border Classes="item wait">
+                      <DockPanel>
+                        <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <ComboBox Classes="mini" ItemsSource="{x:Static ed:ConditionModel.Choices}" SelectedItem="{Binding Choice}" />
+                          <ComboBox Classes="mini" ItemsSource="{Binding Values}" SelectedItem="{Binding Value}" />
+                          <TextBlock Classes="muted" Text="{Binding ValueLabel}" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <WrapPanel ItemSpacing="6" LineSpacing="6">
+                <Button Classes="add" Content="+ 技能点" Command="{Binding SelectedStep.AddWaitCommand, FallbackValue={x:Null}}" CommandParameter="sp" />
+                <Button Classes="add" Content="+ 连携就绪" Command="{Binding SelectedStep.AddWaitCommand, FallbackValue={x:Null}}" CommandParameter="chain" />
+                <Button Classes="add" Content="+ 大招就绪" Command="{Binding SelectedStep.AddWaitCommand, FallbackValue={x:Null}}" CommandParameter="ult" />
+                <Button Classes="add" Content="+ 提示在前" Command="{Binding SelectedStep.AddWaitCommand, FallbackValue={x:Null}}" CommandParameter="prompt" />
+              </WrapPanel>
+            </StackPanel>
+            <Border Classes="rule" />
+
+            <StackPanel Classes="group">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Text="识别到哪个后继就走哪条" VerticalAlignment="Bottom" />
+                <TextBlock Classes="h" Text="NEXT  去向" />
+              </DockPanel>
+              <Border Classes="item edge">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Left" Text="下一步" VerticalAlignment="Center" Margin="0,0,8,0" />
+                  <ComboBox ItemsSource="{Binding NextOptions}" SelectedItem="{Binding NextOption}" HorizontalAlignment="Stretch" />
+                </DockPanel>
+              </Border>
+              <TextBlock Classes="dim" Text="{Binding DefaultNextText}" />
+              <CheckBox Content="这条边算新的一轮（轮数 +1）" FontSize="12"
+                        IsChecked="{Binding SelectedStep.NewRound, FallbackValue=False}"
+                        IsEnabled="{Binding SelectedStep.HasExplicitNext, FallbackValue=False}" />
+              <ItemsControl ItemsSource="{Binding SelectedStep.Branches, FallbackValue={x:Null}}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ed:BranchModel">
+                    <Border Classes="item edge">
+                      <DockPanel>
+                        <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除" />
+                        <StackPanel Spacing="4">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="若" VerticalAlignment="Center" />
+                            <ComboBox Classes="mini" ItemsSource="{x:Static ed:ConditionModel.Choices}" SelectedItem="{Binding Condition.Choice}" />
+                            <ComboBox Classes="mini" ItemsSource="{Binding Condition.Values}" SelectedItem="{Binding Condition.Value}" />
+                            <TextBlock Classes="muted" Text="{Binding Condition.ValueLabel}" VerticalAlignment="Center" />
+                          </StackPanel>
+                          <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="→" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Target}" HorizontalAlignment="Stretch" />
+                          </DockPanel>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <WrapPanel>
+                <Button Classes="add" Content="+ 条件分支" Command="{Binding SelectedStep.AddBranchCommand, FallbackValue={x:Null}}" />
+              </WrapPanel>
+              <TextBlock Classes="dim" Text="条件决定 overlay 提示哪条路；实际走哪条看识别到的操作，临场换路也跟得上。" />
+            </StackPanel>
+            <Border Classes="rule" />
+
+            <StackPanel Classes="group">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Text="显示在 overlay 上" VerticalAlignment="Bottom" />
+                <TextBlock Classes="h" Text="NOTE  备注" />
+              </DockPanel>
+              <TextBox Text="{Binding SelectedStep.Note, FallbackValue=''}" AcceptsReturn="False" TextWrapping="Wrap"
+                       PlaceholderText="例如：等 2 可放再重击" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- what the overlay shows at this step -->
+        <Border Grid.Row="1" Margin="1,0,0,0" Background="#050606" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
+                Padding="16,12,16,16" IsVisible="{Binding HasStep}">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="h" Text="OVERLAY  走到这一步时显示" />
+            <Panel>
+              <ov:ShapeDecorator Chamfer="12" Fill="#E6141616" Stroke="#24ECEBE6">
+                <StackPanel Margin="12,10,12,12" Spacing="8">
+                  <TextBlock Text="现在" FontSize="10.5" FontWeight="SemiBold" LetterSpacing="1.5" Foreground="{StaticResource Amber}" />
+                  <ItemsControl ItemsSource="{Binding PreviewNow}" ItemTemplate="{StaticResource PreviewChip}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel ItemSpacing="5" LineSpacing="5" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                  </ItemsControl>
+                  <TextBlock FontSize="12" Foreground="{StaticResource Amber}" TextWrapping="Wrap" Text="{Binding PreviewHint}"
+                             IsVisible="{Binding HasPreviewHint}" />
+                  <Border Classes="rule" Background="#1AECEBE6" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="muted" Text="接下来" VerticalAlignment="Center" />
+                    <ItemsControl Classes="next" ItemsSource="{Binding PreviewNext}" ItemTemplate="{StaticResource PreviewChip}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                  </StackPanel>
+                </StackPanel>
+              </ov:ShapeDecorator>
+              <Border Width="26" Height="2" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{StaticResource Amber}" />
+            </Panel>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <!-- settings page -->
+    <ScrollViewer Grid.Row="1" IsVisible="{Binding #SettingsTab.IsChecked}">
+      <WrapPanel Margin="28,24">
+        <Border Classes="card">
+          <StackPanel Spacing="14">
+            <TextBlock Classes="h" Text="OVERLAY" />
+            <DockPanel>
+              <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding Settings.StatusVisible}" OnContent="" OffContent="" />
+              <StackPanel Spacing="2">
+                <TextBlock Text="显示状态面板" />
+                <TextBlock Classes="dim" Text="前期用来核对读数；熟练后可以关掉，只留轴提示。" />
+              </StackPanel>
+            </DockPanel>
+            <DockPanel>
+              <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding Settings.HideWhenHudAbsent}" OnContent="" OffContent="" />
+              <StackPanel Spacing="2">
+                <TextBlock Text="读不到 HUD 时隐藏" />
+                <TextBlock Classes="dim" Text="开地图、背包、跑图时自动收起。" />
+              </StackPanel>
+            </DockPanel>
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                <NumericUpDown Value="{Binding Settings.HideAfterSeconds}" Minimum="1" Maximum="60" Increment="1"
+                               FormatString="0" Width="110" IsEnabled="{Binding Settings.HideWhenHudAbsent}" />
+                <TextBlock Classes="muted" Text="秒" VerticalAlignment="Center" />
+              </StackPanel>
+              <StackPanel Spacing="2">
+                <TextBlock Text="读不到多久后隐藏" />
+                <TextBlock Classes="dim" Text="要长过大招特写，不然会闪。" />
+              </StackPanel>
+            </DockPanel>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card">
+          <StackPanel Spacing="14">
+            <TextBlock Classes="h" Text="HOTKEYS  快捷键" />
+            <DockPanel>
+              <TextBox x:Name="HotkeyBox" DockPanel.Dock="Right" Width="150" Classes="mono" IsReadOnly="True"
+                       HorizontalContentAlignment="Center" Text="{Binding Settings.ResetHotkey}"
+                       PlaceholderText="未设置" KeyDown="OnHotkeyKeyDown" />
+              <StackPanel Spacing="2">
+                <TextBlock Text="轴回到开头" />
+                <TextBlock Classes="dim" Text="点一下框再按新组合，退格清除。只在游戏在前台时生效。" />
+              </StackPanel>
+            </DockPanel>
+            <TextBlock FontSize="12" Foreground="{StaticResource Warn}" Text="{Binding Settings.HotkeyError}"
+                       IsVisible="{Binding Settings.HotkeyError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card">
+          <StackPanel Spacing="14">
+            <TextBlock Classes="h" Text="GAME  游戏" />
+            <StackPanel Spacing="2">
+              <TextBlock Text="识别配置" />
+              <TextBlock Classes="dim" Text="{Binding Settings.ProfileName}" />
+            </StackPanel>
+            <StackPanel Spacing="2">
+              <TextBlock Text="轴存放位置" />
+              <SelectableTextBlock Classes="dim" FontFamily="{StaticResource Mono}" Text="{Binding Settings.LibraryFolder}" TextWrapping="Wrap" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </WrapPanel>
+    </ScrollViewer>
+  </Grid>
+</Window>

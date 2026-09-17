@@ -11,6 +11,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Anaphora.Analysis.Tests/Anaphora.Analysis.Tests.csproj" />
+    <Project Path="tests/Anaphora.App.Tests/Anaphora.App.Tests.csproj" />
     <Project Path="tests/Anaphora.Core.Tests/Anaphora.Core.Tests.csproj" />
   </Folder>
 </Solution>

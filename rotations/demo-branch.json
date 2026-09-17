@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "id": "demo-branch",
+  "displayName": "演示：分支与技能后普攻",
+  "profileId": "endfield",
+  "controlledSlot": 3,
+  "notes": "不是真实队伍，只用来演示编辑器能写什么：技能后第 K 下普攻、自定义文字、按连携提示分支、等大招。",
+  "segments": [
+    { "id": "main", "name": "主线" },
+    { "id": "branch", "name": "分支" }
+  ],
+  "steps": [
+    { "id": "m1", "segment": "main", "do": "3", "note": "3 进入技能状态" },
+    {
+      "id": "m2",
+      "segment": "main",
+      "do": "2E",
+      "before": ["3普攻2"],
+      "branches": [{ "when": ["prompt:4"], "to": "b1" }],
+      "note": "第 2 下普攻后马上接 2 的连携"
+    },
+    { "id": "m3", "segment": "main", "do": "1" },
+    { "id": "m4", "segment": "main", "do": "3大招", "before": [{ "text": "拉开距离" }], "when": ["ult:3"] },
+    { "id": "m5", "segment": "main", "do": "4", "next": "m1", "newRound": true },
+    { "id": "b1", "segment": "branch", "do": "4E", "next": "m4" }
+  ]
+}

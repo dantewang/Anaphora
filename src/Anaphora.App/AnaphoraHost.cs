@@ -15,7 +15,8 @@ namespace Anaphora.App;
 /// Threads: snapshots arrive on the capture thread, where the tracker runs too
 /// (frames are serialised there, so it sees them in order). Only the finished
 /// state crosses to the UI thread, and only the newest one -- if the UI falls
-/// behind, intermediate states are dropped rather than queued.
+/// behind, intermediate states are dropped rather than queued. Swapping the
+/// rotation replaces the tracker under the same lock.
 /// </summary>
 internal sealed class AnaphoraHost : IDisposable
 {
@@ -23,15 +24,14 @@ internal sealed class AnaphoraHost : IDisposable
     private static readonly TimeSpan PlacementInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly AppOptions options;
-    private readonly GameProfile profile;
-    private readonly RotationTracker tracker;
     private readonly AvaloniaOverlaySurface surface;
     private readonly Stopwatch clock = Stopwatch.StartNew();
     private readonly DispatcherTimer discovery;
     private readonly DispatcherTimer placement;
     private readonly Lock trackerGate = new();
-    private readonly GlobalHotkey? resetHotkey;
 
+    private RotationTracker tracker;
+    private GlobalHotkey? resetHotkey;
     private AppSettings settings;
     private HudCapture? capture;
     private nint game;
@@ -40,15 +40,14 @@ internal sealed class AnaphoraHost : IDisposable
     private int posted;
     private bool checkedClickThrough;
 
-    public AnaphoraHost(AppOptions options, AppSettings settings)
+    public AnaphoraHost(AppOptions options, AppSettings settings, RotationLibrary library)
     {
         this.options = options;
         this.settings = settings;
+        Library = library;
 
-        profile = ProfileStore.Load(options.ProfilePath);
-        Rotation rotation = RotationStore.Load(options.RotationPath);
-
-        IReadOnlyList<ProfileProblem> problems = [.. ProfileValidator.Validate(profile), .. RotationValidator.Validate(rotation, profile)];
+        Profile = ProfileStore.Load(options.ProfilePath);
+        IReadOnlyList<ProfileProblem> problems = ProfileValidator.Validate(Profile);
         foreach (ProfileProblem problem in problems)
         {
             Log.Write(problem.ToString());
@@ -56,9 +55,10 @@ internal sealed class AnaphoraHost : IDisposable
 
         if (ProfileValidator.HasErrors(problems))
         {
-            throw new InvalidOperationException($"the profile or rotation has errors; see {Log.Location}.");
+            throw new InvalidOperationException($"the profile has errors; see {Log.Location}.");
         }
 
+        Rotation rotation = FirstRotation();
         tracker = new RotationTracker(rotation);
         surface = new AvaloniaOverlaySurface(OverlayAnchor.BelowOperator);
         surface.Model.StatusVisible = settings.StatusVisible;
@@ -67,39 +67,36 @@ internal sealed class AnaphoraHost : IDisposable
 
         discovery = new DispatcherTimer(DiscoveryInterval, DispatcherPriority.Background, (_, _) => Discover());
         placement = new DispatcherTimer(PlacementInterval, DispatcherPriority.Render, (_, _) => Place());
+        RegisterHotkey();
 
-        if (HotkeyGesture.Parse(settings.ResetHotkey) is { } gesture)
-        {
-            resetHotkey = new GlobalHotkey(gesture);
-            resetHotkey.Pressed += () => Dispatcher.UIThread.Post(() =>
-            {
-                Log.Write($"rotation reset by {gesture}");
-                ResetRotation();
-            });
-        }
-        else if (!string.IsNullOrWhiteSpace(settings.ResetHotkey))
-        {
-            Log.Write($"[warn] reset hotkey \"{settings.ResetHotkey}\" not understood; expected e.g. Ctrl+Alt+R or Shift+F9");
-        }
-
-        Log.Write($"started: profile {profile.Id}, rotation {rotation.Id}, process {options.ProcessName ?? profile.Window.ProcessName}");
+        Log.Write($"started: profile {Profile.Id}, rotation {rotation.Id}, process {options.ProcessName ?? Profile.Window.ProcessName}");
     }
 
-    public bool StatusVisible => surface.Model.StatusVisible;
+    /// <summary>Settings changed from somewhere -- the tray or the main window -- so the other can follow.</summary>
+    public event Action? SettingsChanged;
 
-    public bool HideWhenHudAbsent => settings.HideWhenHudAbsent;
+    /// <summary>The overlay started following a different rotation.</summary>
+    public event Action? RotationChanged;
+
+    public GameProfile Profile { get; }
+
+    public RotationLibrary Library { get; }
+
+    public AppSettings Settings => settings;
+
+    public Rotation ActiveRotation
+    {
+        get
+        {
+            lock (trackerGate)
+            {
+                return tracker.Rotation;
+            }
+        }
+    }
 
     /// <summary>The reset hotkey as the tray should show it, or null when there is none.</summary>
     public string? ResetHotkeyText => resetHotkey?.Gesture.Text;
-
-    /// <returns>The new state.</returns>
-    public bool ToggleHideWhenHudAbsent()
-    {
-        settings = settings with { HideWhenHudAbsent = !settings.HideWhenHudAbsent };
-        settings.Save();
-        Place();
-        return settings.HideWhenHudAbsent;
-    }
 
     public void Start()
     {
@@ -108,14 +105,53 @@ internal sealed class AnaphoraHost : IDisposable
         Discover();
     }
 
-    /// <returns>The new state.</returns>
-    public bool ToggleStatus()
+    public void UpdateSettings(AppSettings updated)
     {
-        bool visible = !surface.Model.StatusVisible;
-        surface.Model.StatusVisible = visible;
-        settings = settings with { StatusVisible = visible };
+        if (updated == settings)
+        {
+            return;
+        }
+
+        AppSettings previous = settings;
+        settings = updated;
         settings.Save();
-        return visible;
+
+        surface.Model.StatusVisible = settings.StatusVisible;
+        if (previous.ResetHotkey != settings.ResetHotkey)
+        {
+            RegisterHotkey();
+        }
+
+        Place();
+        SettingsChanged?.Invoke();
+    }
+
+    /// <returns>Problems that stopped the switch; empty when the overlay now follows <paramref name="rotation"/>.</returns>
+    public IReadOnlyList<ProfileProblem> UseRotation(Rotation rotation)
+    {
+        IReadOnlyList<ProfileProblem> problems = RotationValidator.Validate(rotation, Profile);
+        if (ProfileValidator.HasErrors(problems))
+        {
+            return [.. problems.Where(p => p.Severity == ProfileProblemSeverity.Error)];
+        }
+
+        RotationState state;
+        lock (trackerGate)
+        {
+            tracker = new RotationTracker(rotation);
+            state = tracker.State;
+        }
+
+        surface.Model.Apply(HudSnapshot.Absent, state, SinceReadable);
+        Log.Write($"following rotation {rotation.Id}");
+
+        if (settings.ActiveRotation != rotation.Id)
+        {
+            UpdateSettings(settings with { ActiveRotation = rotation.Id });
+        }
+
+        RotationChanged?.Invoke();
+        return [];
     }
 
     public void ResetRotation()
@@ -142,6 +178,67 @@ internal sealed class AnaphoraHost : IDisposable
         surface.Model.Apply(HudSnapshot.Absent, state, SinceReadable);
     }
 
+    /// <summary>
+    /// --rotation wins; otherwise the active rotation in the library; otherwise
+    /// any usable one there. The library is seeded with the shipped rotations,
+    /// so there is always something.
+    /// </summary>
+    private Rotation FirstRotation()
+    {
+        if (options.RotationPath is { } path)
+        {
+            return Checked(RotationStore.Load(path))
+                ?? throw new InvalidOperationException($"the rotation {path} has errors; see {Log.Location}.");
+        }
+
+        IEnumerable<Rotation> candidates = Library.Load()
+            .Where(e => e.Rotation is not null)
+            .OrderBy(e => e.Id == settings.ActiveRotation ? 0 : 1)
+            .Select(e => e.Rotation!);
+
+        foreach (Rotation candidate in candidates)
+        {
+            if (Checked(candidate) is { } usable)
+            {
+                return usable;
+            }
+        }
+
+        throw new InvalidOperationException($"no usable rotation in {Library.Directory}; see {Log.Location}.");
+
+        Rotation? Checked(Rotation rotation)
+        {
+            IReadOnlyList<ProfileProblem> problems = RotationValidator.Validate(rotation, Profile);
+            foreach (ProfileProblem problem in problems)
+            {
+                Log.Write($"rotation {rotation.Id}: {problem}");
+            }
+
+            return ProfileValidator.HasErrors(problems) ? null : rotation;
+        }
+    }
+
+    private void RegisterHotkey()
+    {
+        resetHotkey?.Dispose();
+        resetHotkey = null;
+
+        if (HotkeyGesture.Parse(settings.ResetHotkey) is { } gesture)
+        {
+            resetHotkey = new GlobalHotkey(gesture);
+            resetHotkey.Pressed += () => Dispatcher.UIThread.Post(() =>
+            {
+                Log.Write($"rotation reset by {gesture}");
+                ResetRotation();
+            });
+        }
+        else if (!string.IsNullOrWhiteSpace(settings.ResetHotkey))
+        {
+            Log.Write($"[warn] reset hotkey \"{settings.ResetHotkey}\" not understood; expected e.g. Ctrl+Alt+R or Shift+F9");
+        }
+    }
+
+
     public void Dispose()
     {
         discovery.Stop();
@@ -158,7 +255,7 @@ internal sealed class AnaphoraHost : IDisposable
             return;
         }
 
-        string name = options.ProcessName ?? profile.Window.ProcessName;
+        string name = options.ProcessName ?? Profile.Window.ProcessName;
         nint window = FindWindow(name);
         if (window == 0)
         {
@@ -168,7 +265,7 @@ internal sealed class AnaphoraHost : IDisposable
 
         try
         {
-            HudCapture started = HudCapture.Create(window, profile, new CaptureOptions { Rate = options.Rate });
+            HudCapture started = HudCapture.Create(window, Profile, new CaptureOptions { Rate = options.Rate });
             started.SnapshotReady += OnSnapshot;
             started.Closed += () => Dispatcher.UIThread.Post(() => StopCapture("the game window closed"));
             started.Faulted += ex => Dispatcher.UIThread.Post(() => StopCapture($"capture faulted: {ex}"));
