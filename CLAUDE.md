@@ -512,6 +512,12 @@ dotnet run --project src/Anaphora.App -- --process claude --any-foreground
 # 38% 的失效态——专门用来肉眼看 overlay 长什么样。只看样子，不能拿来判断读数。
 dotnet run --project src/Anaphora.App -- --process claude --any-foreground --demo
 
+# 发到游戏机上的自带运行时单文件 exe（约 130MB）。DebugType=none 去掉托管符号；
+# SkiaSharp 和 HarfBuzz 的原生 .pdb 是 NuGet 包带进来的，运行用不上，发包前删掉。
+# profiles/ 和 rotations/ 是 exe 旁边的散文件，不在 exe 里面，要一起拷过去。
+dotnet publish src/Anaphora.App -c Release -r win-x64 --self-contained \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish/app
+
 # WGC 可行性探针。参数：进程名（默认 Endfield）、输出目录。
 # 打印窗口信息 / display affinity / 帧率 / 亮度统计，并落三张 PNG：全图、1280 宽预览、
 # 左上角原分辨率切片。换游戏或换机器时重跑一次。
@@ -589,6 +595,10 @@ dotnet run --project tools/Anaphora.CaptureProbe -- hash 2292 926 120 120 a=fram
 - 部署：游戏机 clone 仓库直接 `dotnet run`，或
   `dotnet publish tools/Anaphora.CaptureProbe -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish`
   出一个约 130MB 的单文件 exe 拷过去（已验证 WGC 在单文件模式下正常）。
+- **App 本身也能这么发**（命令见上面的「命令」一节）。2026-10-24 在开发机上验过发布版：
+  WGC 抓取、overlay 窗口尺寸、鼠标穿透、全局快捷键在单文件自带运行时模式下都正常。
+  **但 `profiles/` 和 `rotations/` 是 exe 旁边的散文件，不在 exe 里**，拷过去要带上，
+  否则起来就找不到 profile。
 - overlay 的端到端测试、alt-tab / 切分辨率的稳定性测试只能在游戏机上做。
 - **不要用串流（Moonlight / Parsec / Steam）的画面标定阈值**：视频压缩会改颜色、通常也不是
   4K，而连携条颜色门在 0.365 这种边界上就会判错。串流只适合看布局。
