@@ -23,6 +23,20 @@ internal sealed class AnaphoraHost : IDisposable
     private static readonly TimeSpan DiscoveryInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan PlacementInterval = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>
+    /// What --demo shows instead of an unreadable HUD: one skill point short of
+    /// three, slot 2's chain ready and its ultimate up, and E leading on 1 then
+    /// 2. Enough for every part of the overlay to have something to draw.
+    /// </summary>
+    private static readonly HudSnapshot DemoReadings = new()
+    {
+        HudPresent = true,
+        SkillPoints = 2,
+        Chains = [new FillBarReading(0.39, false), new FillBarReading(1, true), new FillBarReading(0.02, false), new FillBarReading(0.13, false)],
+        Ultimates = [new DiscStateReading(false, 0.3, 0), new DiscStateReading(true, 1, 0.88), new DiscStateReading(false, 0, 0), new DiscStateReading(false, 0, 0)],
+        Prompts = [new PortraitReading("demo-1", 0, 0) { Slot = 1 }, new PortraitReading("demo-2", 0, 0) { Slot = 2 }],
+    };
+
     private readonly AppOptions options;
     private readonly AvaloniaOverlaySurface surface;
     private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -60,8 +74,8 @@ internal sealed class AnaphoraHost : IDisposable
 
         Rotation rotation = FirstRotation();
         tracker = new RotationTracker(rotation);
-        surface = new AvaloniaOverlaySurface(OverlayAnchor.BelowOperator);
-        surface.Model.StatusVisible = settings.StatusVisible;
+        surface = new AvaloniaOverlaySurface(OverlayAnchor.AboveBottomHud);
+        surface.Model.TrackVisible = settings.TrackVisible;
         surface.Model.Apply(HudSnapshot.Absent, tracker.State, TimeSpan.Zero);
         surface.Model.ShowWaiting("等待游戏窗口");
 
@@ -116,7 +130,7 @@ internal sealed class AnaphoraHost : IDisposable
         settings = updated;
         settings.Save();
 
-        surface.Model.StatusVisible = settings.StatusVisible;
+        surface.Model.TrackVisible = settings.TrackVisible;
         if (previous.ResetHotkey != settings.ResetHotkey)
         {
             RegisterHotkey();
@@ -331,6 +345,11 @@ internal sealed class AnaphoraHost : IDisposable
     /// <summary>Capture thread.</summary>
     private void OnSnapshot(HudSnapshot hud)
     {
+        if (options.Demo && !hud.HudPresent)
+        {
+            hud = DemoReadings;
+        }
+
         TimeSpan now = clock.Elapsed;
         if (hud.HudPresent)
         {

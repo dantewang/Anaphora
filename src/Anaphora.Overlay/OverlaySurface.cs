@@ -18,14 +18,16 @@ public interface IOverlaySurface : IDisposable
     void Place(CorePixelRect? clientOnScreen);
 }
 
-/// <summary>Where on the game the overlay's top edge is centred, as fractions of the client area.</summary>
+/// <summary>Where on the game the overlay's bottom edge is centred, as fractions of the client area.</summary>
 public readonly record struct OverlayAnchor(double X, double Y)
 {
     /// <summary>
-    /// Placement A from the mockup: below the controlled operator, above the
-    /// bottom HUD, where the player is already looking.
+    /// Placement A from the mockup: below the controlled operator, where the
+    /// player is already looking. Anchored by its bottom edge, just clear of the
+    /// game's own bottom HUD band, so the title card grows upward when cues
+    /// appear and the strip under it never moves.
     /// </summary>
-    public static readonly OverlayAnchor BelowOperator = new(0.5, 0.605);
+    public static readonly OverlayAnchor AboveBottomHud = new(0.5, 0.67);
 }
 
 public sealed class AvaloniaOverlaySurface : IOverlaySurface
@@ -36,7 +38,7 @@ public sealed class AvaloniaOverlaySurface : IOverlaySurface
 
     public AvaloniaOverlaySurface(OverlayAnchor? anchor = null)
     {
-        this.anchor = anchor ?? OverlayAnchor.BelowOperator;
+        this.anchor = anchor ?? OverlayAnchor.AboveBottomHud;
         Model = new OverlayViewModel();
         window = new OverlayWindow { DataContext = Model, Opacity = 0 };
         window.Show();
@@ -65,8 +67,9 @@ public sealed class AvaloniaOverlaySurface : IOverlaySurface
         window.SetScale(client.Width / scaling / OverlayWindow.ReferenceWidth);
 
         int width = (int)Math.Round(window.Bounds.Width * scaling);
+        int height = (int)Math.Round(window.Bounds.Height * scaling);
         int x = client.X + (int)Math.Round(client.Width * anchor.X) - (width / 2);
-        int y = client.Y + (int)Math.Round(client.Height * anchor.Y);
+        int y = client.Y + (int)Math.Round(client.Height * anchor.Y) - height;
 
         Win32Window.Show(window.Handle, x, y);
         visible = true;

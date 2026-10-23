@@ -22,6 +22,9 @@
   <Window.Resources>
     <ed:IntEqualsConverter x:Key="IsInt" />
 
+    <!-- the overlay's title-card face, so the preview shows the real thing -->
+    <FontFamily x:Key="Title">Arial Black, Segoe UI Black, Microsoft YaHei UI</FontFamily>
+
     <DataTemplate x:Key="PreviewChip" x:DataType="ov:StepChip">
       <StackPanel Orientation="Horizontal" Spacing="5">
         <ov:ShapeDecorator Classes="chip"
@@ -467,6 +470,8 @@
             <Button Classes="ghost" Content="撤销" Command="{Binding UndoCommand}" ToolTip.Tip="Ctrl+Z" />
             <Button Classes="ghost" Content="重做" Command="{Binding RedoCommand}" ToolTip.Tip="Ctrl+Y" />
             <Button Classes="ghost" Content="＋ 在后面插入" Command="{Binding InsertStepCommand}" />
+            <Button Classes="ghost" Content="✂ 在这里分段" Command="{Binding SplitSegmentCommand}"
+                    ToolTip.Tip="这一步和它后面的同段步骤归入新的一段；overlay 一次显示一段" />
             <Button Classes="ghost" Content="⑂ 从这里分支" Command="{Binding BranchFromStepCommand}" />
             <Button Classes="ghost" Content="删除这一步" Command="{Binding DeleteStepCommand}" />
           </StackPanel>
@@ -489,6 +494,7 @@
             <ed:RotationGraph.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="在后面插入一步" Command="{Binding InsertStepCommand}" />
+                <MenuItem Header="在这里分段" Command="{Binding SplitSegmentCommand}" />
                 <MenuItem Header="从这里加一条分支" Command="{Binding BranchFromStepCommand}" />
                 <Separator />
                 <MenuItem Header="删除这一步" Command="{Binding DeleteStepCommand}" />
@@ -508,15 +514,22 @@
                 <Run Text="~1重击  ~3普攻2  ~&quot;文字&quot;" FontFamily="{StaticResource Mono}" Foreground="{StaticResource Text}" />
               </TextBlock>
             </DockPanel>
-            <Grid ColumnDefinitions="Auto,110,*,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="Auto,Auto,110,*,Auto" ColumnSpacing="8">
               <ComboBox ItemsSource="{Binding Document.Segments}" SelectedItem="{Binding QuickSegment}" MinWidth="96" />
-              <TextBox Grid.Column="1" Text="{Binding QuickSegment.Name, FallbackValue=''}" PlaceholderText="段名" />
-              <TextBox Grid.Column="2" Classes="mono" Text="{Binding QuickText}">
+              <!-- the segment is what the overlay shows one of, so its order and
+                   its existence are the user's call, not a by-product of branching -->
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                <Button Classes="ghost" Content="↑" Command="{Binding MoveSegmentUpCommand}" ToolTip.Tip="这一段往前挪" MinWidth="30" />
+                <Button Classes="ghost" Content="↓" Command="{Binding MoveSegmentDownCommand}" ToolTip.Tip="这一段往后挪" MinWidth="30" />
+                <Button Classes="ghost" Content="✕" Command="{Binding DeleteSegmentCommand}" ToolTip.Tip="删掉这一段和它的所有步骤" MinWidth="30" />
+              </StackPanel>
+              <TextBox Grid.Column="2" Text="{Binding QuickSegment.Name, FallbackValue=''}" PlaceholderText="段名" />
+              <TextBox Grid.Column="3" Classes="mono" Text="{Binding QuickText}">
                 <TextBox.KeyBindings>
                   <KeyBinding Gesture="Enter" Command="{Binding ApplyQuickCommand}" />
                 </TextBox.KeyBindings>
               </TextBox>
-              <Button Grid.Column="3" Content="替换这一段" Command="{Binding ApplyQuickCommand}" />
+              <Button Grid.Column="4" Content="替换这一段" Command="{Binding ApplyQuickCommand}" />
             </Grid>
             <TextBlock FontSize="12" Foreground="{StaticResource Warn}" Text="{Binding QuickError}"
                        IsVisible="{Binding QuickError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
@@ -554,6 +567,10 @@
                   <RadioButton Classes="seg" GroupName="kind" Content="连携" IsChecked="{Binding SelectedStep.IsChain}" />
                   <RadioButton Classes="seg" GroupName="kind" Content="大招" IsChecked="{Binding SelectedStep.IsUltimate}" />
                 </StackPanel>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="muted" Text="所属段" Width="36" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding Document.Segments}" SelectedItem="{Binding StepSegment}" MinWidth="120" />
               </StackPanel>
               <TextBlock Classes="muted" TextWrapping="Wrap">
                 <Run Text="玩家要做的：" />
@@ -708,14 +725,26 @@
             <Panel>
               <ov:ShapeDecorator Chamfer="12" Fill="#E6141616" Stroke="#24ECEBE6">
                 <StackPanel Margin="12,10,12,12" Spacing="8">
-                  <TextBlock Text="现在" FontSize="10.5" FontWeight="SemiBold" LetterSpacing="1.5" Foreground="{StaticResource Amber}" />
-                  <ItemsControl ItemsSource="{Binding PreviewNow}" ItemTemplate="{StaticResource PreviewChip}">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate>
-                        <WrapPanel ItemSpacing="5" LineSpacing="5" />
-                      </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                  </ItemsControl>
+                  <!-- the title card, shrunk to fit the sidebar -->
+                  <StackPanel HorizontalAlignment="Center" Spacing="0">
+                    <ItemsControl ItemsSource="{Binding PreviewCues}" ItemTemplate="{StaticResource PreviewChip}"
+                                  IsVisible="{Binding HasPreviewCues}" HorizontalAlignment="Center" Margin="0,0,0,6">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel ItemSpacing="5" LineSpacing="5" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <!-- negative margins, not LineHeight: a line box smaller than
+                         the face's own 1.33 em clips the glyph (see OverlayWindow) -->
+                    <TextBlock Text="{Binding PreviewAction.Glyph}" HorizontalAlignment="Center"
+                               FontFamily="{StaticResource Title}" FontSize="53" LetterSpacing="1.2"
+                               Margin="0,-12,0,-13" Foreground="White" />
+                    <TextBlock Text="{Binding PreviewAction.Second}" HorizontalAlignment="Center" Margin="2,3,0,0"
+                               FontWeight="Bold" FontSize="16" LetterSpacing="2.2" Foreground="#D9FFFFFF" />
+                    <TextBlock Text="{Binding PreviewAction.Sub}" HorizontalAlignment="Center" Margin="3,3,0,0"
+                               FontFamily="{StaticResource Title}" FontSize="7" LetterSpacing="3" Foreground="#8CFFFFFF" />
+                  </StackPanel>
                   <TextBlock FontSize="12" Foreground="{StaticResource Amber}" TextWrapping="Wrap" Text="{Binding PreviewHint}"
                              IsVisible="{Binding HasPreviewHint}" />
                   <Border Classes="rule" Background="#1AECEBE6" />
@@ -745,10 +774,10 @@
           <StackPanel Spacing="14">
             <TextBlock Classes="h" Text="OVERLAY" />
             <DockPanel>
-              <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding Settings.StatusVisible}" OnContent="" OffContent="" />
+              <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding Settings.TrackVisible}" OnContent="" OffContent="" />
               <StackPanel Spacing="2">
-                <TextBlock Text="显示状态面板" />
-                <TextBlock Classes="dim" Text="前期用来核对读数；熟练后可以关掉，只留轴提示。" />
+                <TextBlock Text="显示轴显示器" />
+                <TextBlock Classes="dim" Text="大字下面那条：当前这一段的每一步，高亮停在该按的那一步。关掉就只剩大字。" />
               </StackPanel>
             </DockPanel>
             <DockPanel>

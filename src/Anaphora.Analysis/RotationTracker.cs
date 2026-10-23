@@ -50,6 +50,14 @@ public sealed record RotationState
     /// <summary>The steps after the current one, along the way the overlay suggests.</summary>
     public IReadOnlyList<StepView> Next { get; init; } = [];
 
+    /// <summary>
+    /// Every step of the segment the cursor is in, in order. This is what the
+    /// overlay's rotation strip draws: one segment at a time, with the cursor
+    /// highlighted at <see cref="Position"/>. How long it is, is the user's
+    /// editing decision, so nothing here truncates it.
+    /// </summary>
+    public IReadOnlyList<StepView> Segment { get; init; } = [];
+
     /// <summary>The name of the current step's segment: "开局", "循环".</summary>
     public string SegmentName { get; init; } = string.Empty;
 
@@ -498,6 +506,7 @@ public sealed class RotationTracker
             Cursor = cursor,
             Current = View(cursor.Step),
             Next = upcoming,
+            Segment = [.. segment.Select(View)],
             SegmentName = rotation.SegmentName(cursor.Step),
             Position = segment.TakeWhile(i => i != cursor.Step).Count() + 1,
             SegmentLength = segment.Count,

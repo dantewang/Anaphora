@@ -12,6 +12,9 @@ namespace Anaphora.App;
 ///                        will do for checking the overlay mechanics without the game
 ///   --any-foreground     show the overlay even when the captured window is not in front
 ///   --rate HZ            readings per second (default 20)
+///   --demo               stand in canned readings whenever the HUD is unreadable, so the
+///                        overlay draws its live state on a machine with no game on it.
+///                        For looking at the overlay, never for judging a reading.
 /// </summary>
 internal sealed record AppOptions
 {
@@ -28,6 +31,9 @@ internal sealed record AppOptions
 
     public double Rate { get; init; } = 20;
 
+    /// <summary>Draw the overlay from canned readings when the real HUD is not there.</summary>
+    public bool Demo { get; init; }
+
     public static AppOptions Parse(string[] args)
     {
         var options = new AppOptions();
@@ -41,6 +47,7 @@ internal sealed record AppOptions
                 "--rotation" => options with { RotationPath = Next() is { } rotation ? Path.GetFullPath(rotation) : null },
                 "--process" => options with { ProcessName = Next() },
                 "--any-foreground" => options with { RequireForeground = false },
+                "--demo" => options with { Demo = true },
                 "--rate" => options with
                 {
                     Rate = double.TryParse(Next(), NumberStyles.Float, CultureInfo.InvariantCulture, out double rate) ? rate : options.Rate,

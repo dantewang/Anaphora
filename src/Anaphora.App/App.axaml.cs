@@ -69,8 +69,8 @@ public partial class App : Application
         var open = new NativeMenuItem("打开主界面");
         open.Click += (_, _) => ShowWindow();
 
-        var status = new NativeMenuItem("显示状态面板") { ToggleType = MenuItemToggleType.CheckBox };
-        status.Click += (_, _) => host.UpdateSettings(host.Settings with { StatusVisible = !host.Settings.StatusVisible });
+        var status = new NativeMenuItem("显示轴显示器") { ToggleType = MenuItemToggleType.CheckBox };
+        status.Click += (_, _) => host.UpdateSettings(host.Settings with { TrackVisible = !host.Settings.TrackVisible });
 
         var hide = new NativeMenuItem("读不到 HUD 时隐藏") { ToggleType = MenuItemToggleType.CheckBox };
         hide.Click += (_, _) => host.UpdateSettings(host.Settings with { HideWhenHudAbsent = !host.Settings.HideWhenHudAbsent });
@@ -94,7 +94,7 @@ public partial class App : Application
 
         void Sync()
         {
-            status.IsChecked = host.Settings.StatusVisible;
+            status.IsChecked = host.Settings.TrackVisible;
             hide.IsChecked = host.Settings.HideWhenHudAbsent;
             reset.Header = host.ResetHotkeyText is { } hotkey ? $"轴回到开头（{hotkey}）" : "轴回到开头";
         }

@@ -188,11 +188,19 @@ internal sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial string? Status { get; set; }
 
+    /// <summary>The soft cues leading into the selected step, as the overlay draws them.</summary>
     [ObservableProperty]
-    public partial IReadOnlyList<StepChip> PreviewNow { get; set; } = [];
+    [NotifyPropertyChangedFor(nameof(HasPreviewCues))]
+    public partial IReadOnlyList<StepChip> PreviewCues { get; set; } = [];
+
+    /// <summary>The key the overlay's title card would show at the selected step.</summary>
+    [ObservableProperty]
+    public partial PrimaryAction PreviewAction { get; set; } = PrimaryAction.Standby;
 
     [ObservableProperty]
     public partial IReadOnlyList<StepChip> PreviewNext { get; set; } = [];
+
+    public bool HasPreviewCues => PreviewCues.Count > 0;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPreviewHint))]
@@ -266,9 +274,11 @@ internal sealed partial class MainViewModel : ObservableObject
 
     private void RefreshStep()
     {
+        OnPropertyChanged(nameof(StepSegment));
         if (Document is not { } document || SelectedStep is not { } step)
         {
-            PreviewNow = [];
+            PreviewCues = [];
+            PreviewAction = PrimaryAction.Standby;
             PreviewNext = [];
             PreviewHint = null;
             return;
@@ -293,7 +303,8 @@ internal sealed partial class MainViewModel : ObservableObject
         // What the overlay would show at this step, going the default way.
         int index = document.Steps.IndexOf(step);
         RotationStep current = rotation.Steps[index];
-        PreviewNow = [.. StepChip.Sequence(new StepView(current, []))];
+        PreviewCues = [.. current.Before.Select(c => StepChip.From(c, false))];
+        PreviewAction = PrimaryAction.From(new StepView(current, []), string.Empty);
 
         var upcoming = new List<StepChip>();
         for (int k = 0, at = index; k < 3; k++)
@@ -373,6 +384,84 @@ internal sealed partial class MainViewModel : ObservableObject
         if (Document is { } document && SelectedStep is { } step)
         {
             SelectedStep = document.AddSegment(step);
+        }
+    }
+
+    /// <summary>
+    /// The selected step's segment, as the inspector's combo box sets it. A
+    /// segment is what the overlay shows one of at a time, so which one a step
+    /// belongs to is a real editing decision, not just a lane in the graph.
+    /// </summary>
+    public SegmentModel? StepSegment
+    {
+        get => Document is { } document && SelectedStep is { } step ? document.SegmentOf(step) : null;
+        set
+        {
+            // Avalonia writes null back whenever a combo box's items are replaced.
+            if (value is null || Document is not { } document || SelectedStep is not { } step)
+            {
+                return;
+            }
+
+            if (document.MoveToSegment(step, value))
+            {
+                QuickSegment = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void SplitSegment()
+    {
+        if (Document is not { } document || SelectedStep is not { } step)
+        {
+            return;
+        }
+
+        if (document.SplitAt(step) is { } fresh)
+        {
+            QuickSegment = fresh;
+            Status = $"从这一步起分成了新的一段：{fresh.Name}";
+        }
+        else
+        {
+            Status = "这一步已经是本段的第一步了";
+        }
+    }
+
+    [RelayCommand]
+    private void MoveSegmentUp() => Shift(-1);
+
+    [RelayCommand]
+    private void MoveSegmentDown() => Shift(1);
+
+    private void Shift(int delta)
+    {
+        if (Document is { } document && QuickSegment is { } segment && !document.MoveSegment(segment, delta))
+        {
+            Status = delta < 0 ? "已经是第一段" : "已经是最后一段";
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteSegment()
+    {
+        if (Document is not { } document || QuickSegment is not { } segment)
+        {
+            return;
+        }
+
+        string name = segment.Name;
+        if (document.RemoveSegment(segment))
+        {
+            QuickSegment = document.Segments.FirstOrDefault();
+            SelectedStep = document.Steps.FirstOrDefault();
+            Status = $"删掉了「{name}」和它的所有步骤";
+        }
+        else
+        {
+            Status = "删不掉：轴至少要留一段、一步";
         }
     }
 
@@ -578,7 +667,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public string LibraryFolder => host.Library.Directory;
 
     [ObservableProperty]
-    public partial bool StatusVisible { get; set; }
+    public partial bool TrackVisible { get; set; }
 
     [ObservableProperty]
     public partial bool HideWhenHudAbsent { get; set; }
@@ -592,7 +681,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial string? HotkeyError { get; set; }
 
-    partial void OnStatusVisibleChanged(bool value) => Store(host.Settings with { StatusVisible = value });
+    partial void OnTrackVisibleChanged(bool value) => Store(host.Settings with { TrackVisible = value });
 
     partial void OnHideWhenHudAbsentChanged(bool value) => Store(host.Settings with { HideWhenHudAbsent = value });
 
@@ -621,7 +710,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private void Load()
     {
         loading = true;
-        StatusVisible = host.Settings.StatusVisible;
+        TrackVisible = host.Settings.TrackVisible;
         HideWhenHudAbsent = host.Settings.HideWhenHudAbsent;
         HideAfterSeconds = (decimal)host.Settings.HideAfterSeconds;
         ResetHotkey = host.Settings.ResetHotkey ?? string.Empty;

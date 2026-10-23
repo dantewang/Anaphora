@@ -266,6 +266,176 @@ internal sealed partial class RotationDocument : ObservableObject
         return Steps[Math.Min(index, Steps.Count - 1)];
     }
 
+    /// <summary>
+    /// Cuts a segment in two at <paramref name="at"/>: that step and everything
+    /// after it in the same segment move into a new segment, which takes its
+    /// place right after the old one.
+    /// </summary>
+    /// <returns>The new segment, or null when the step already starts its segment.</returns>
+    public SegmentModel? SplitAt(StepModel at)
+    {
+        SegmentModel old = SegmentOf(at);
+        List<StepModel> moving = [.. StepsIn(old).SkipWhile(s => s != at)];
+        if (moving.Count == 0 || StepsIn(old).First() == at)
+        {
+            return null;
+        }
+
+        var fresh = new SegmentModel(FreeSegmentId(), "新的一段");
+        Batch(() =>
+        {
+            Pin();
+            Segments.Insert(Segments.IndexOf(old) + 1, fresh);
+            foreach (StepModel step in moving)
+            {
+                step.SegmentId = fresh.Id;
+            }
+
+            Unpin();
+        });
+
+        return fresh;
+    }
+
+    /// <summary>
+    /// Moves a step into another segment, at the end of that segment's run.
+    /// Where it and its neighbours go is unchanged.
+    /// </summary>
+    public bool MoveToSegment(StepModel step, SegmentModel target)
+    {
+        if (step.SegmentId == target.Id)
+        {
+            return false;
+        }
+
+        Batch(() =>
+        {
+            Pin();
+            step.SegmentId = target.Id;
+
+            List<StepModel> order = [.. Steps];
+            order.Remove(step);
+            int last = order.FindLastIndex(s => s.SegmentId == target.Id);
+            order.Insert(last < 0 ? order.Count : last + 1, step);
+            Reorder(order);
+
+            Unpin();
+            DropEmptySegments();
+        });
+
+        return true;
+    }
+
+    /// <summary>Moves a segment, and the steps in it, one place up or down.</summary>
+    public bool MoveSegment(SegmentModel segment, int delta)
+    {
+        int from = Segments.IndexOf(segment);
+        int to = from + delta;
+        if (from < 0 || to < 0 || to >= Segments.Count)
+        {
+            return false;
+        }
+
+        Batch(() =>
+        {
+            Pin();
+            Segments.Move(from, to);
+            Reorder([.. Segments.SelectMany(StepsIn)]);
+            Unpin();
+        });
+
+        return true;
+    }
+
+    /// <summary>Deletes a segment and every step in it; refuses to empty the rotation.</summary>
+    public bool RemoveSegment(SegmentModel segment)
+    {
+        List<StepModel> doomed = [.. StepsIn(segment)];
+        if (Segments.Count < 2 || doomed.Count == 0 || doomed.Count >= Steps.Count)
+        {
+            return false;
+        }
+
+        // Remove() already repoints whatever pointed at each step, and drops the
+        // segment once its last step is gone.
+        Batch(() =>
+        {
+            foreach (StepModel step in doomed)
+            {
+                Remove(step);
+            }
+        });
+
+        return true;
+    }
+
+    /// <summary>
+    /// Writes every implicit "the step after this one" edge out in full.
+    ///
+    /// That edge means "the next step in the same segment, or back to the start
+    /// as a new round", so it changes meaning the moment steps move between
+    /// segments. Rearrangements pin the rotation first and unpin it after, which
+    /// leaves every edge pointing where it pointed before.
+    /// </summary>
+    private void Pin()
+    {
+        for (int i = 0; i < Steps.Count; i++)
+        {
+            if (Steps[i].NextId is not null)
+            {
+                continue;
+            }
+
+            (StepModel to, bool newRound) = Positional(i);
+            Steps[i].NextId = to.Id;
+            Steps[i].NewRound = newRound;
+        }
+    }
+
+    /// <summary>Drops the explicit edges that now say exactly what the default says.</summary>
+    private void Unpin()
+    {
+        for (int i = 0; i < Steps.Count; i++)
+        {
+            (StepModel to, bool newRound) = Positional(i);
+            if (Steps[i].NextId == to.Id && Steps[i].NewRound == newRound)
+            {
+                Steps[i].NextId = null;
+                Steps[i].NewRound = false;
+            }
+        }
+    }
+
+    /// <summary>Where step <paramref name="index"/> goes with no explicit next, by position alone.</summary>
+    private (StepModel To, bool NewRound) Positional(int index) =>
+        index + 1 < Steps.Count && Steps[index + 1].SegmentId == Steps[index].SegmentId
+            ? (Steps[index + 1], false)
+            : (Steps[0], true);
+
+    /// <summary>Rearranges <see cref="Steps"/> to match <paramref name="order"/>, by moves only.</summary>
+    private void Reorder(IReadOnlyList<StepModel> order)
+    {
+        for (int i = 0; i < order.Count; i++)
+        {
+            int at = Steps.IndexOf(order[i]);
+            if (at != i)
+            {
+                Steps.Move(at, i);
+            }
+        }
+    }
+
+    private void DropEmptySegments()
+    {
+        foreach (SegmentModel segment in Segments.Where(s => !StepsIn(s).Any()).ToList())
+        {
+            if (Segments.Count > 1)
+            {
+                Segments.Remove(segment);
+            }
+        }
+    }
+
     /// <summary>A new lane with one step in it, reached as a branch from <paramref name="from"/>.</summary>
     public StepModel AddSegment(StepModel from)
     {
@@ -480,7 +650,13 @@ internal sealed partial class StepModel : ObservableObject
 
     public string Id { get; }
 
-    public string SegmentId { get; }
+    /// <summary>
+    /// Which segment draws this step. Setting it is what the inspector's
+    /// "所属段" does; go through <see cref="RotationDocument.MoveToSegment"/>
+    /// instead, which also keeps the segment's steps together and its edges put.
+    /// </summary>
+    [ObservableProperty]
+    public partial string SegmentId { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Slot), nameof(Kind), nameof(KeyText), nameof(IsSkill), nameof(IsChain), nameof(IsUltimate))]

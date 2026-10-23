@@ -112,6 +112,10 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
 - overlay 窗口只有面板那么大（`SizeToContent`），不是铺满游戏客户区；每 100ms 按游戏客户区
   重新定位，并按 `客户区宽度 / RenderScaling / 1920` 整体缩放，保证占屏比例和视觉稿一致。
   游戏不在前台或最小化时隐藏。
+- **`OverlayAnchor` 按底边定位**（`AboveBottomHud` = 客户区高度的 0.67），不是按顶边。
+  大字上方的软提示块有时有有时没有，顶边定位会让下面的状态条跟着上下跳；底边定位让大字
+  向上长，状态条不动。0.67 这个值是压在游戏自己底部 HUD 带上方——第一版按顶边 0.605，
+  实拍帧上直接盖住了技能点条和队伍面板。
 - CsWin32 在 AnyCPU 下生成不了 `GetWindowLongPtr`/`SetWindowLongPtr`（只有 64 位导出），
   扩展样式用 `GetWindowLong`/`SetWindowLong` 即可。
 - **截图验证 overlay 时要用带 `CAPTUREBLT` 的 `BitBlt`**；`Graphics.CopyFromScreen` 截不到
@@ -128,6 +132,14 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
 - 编辑器的文档模型是 Core 不可变记录的**可变镜像**（`RotationDocument`），任何改动触发 `Changed`；
   撤销/重做是整份快照（Ctrl+Z / Ctrl+Y，200 步）。快速输入替换一段时按位置保留原步骤的 id、条件、
   备注和分支，被删掉的步骤的引用改指这一段的第一步。
+- **分段工具**（`RotationDocument.SplitAt` / `MoveToSegment` / `MoveSegment` / `RemoveSegment`）：
+  工具栏和右键菜单里的「✂ 在这里分段」、步骤属性里的「所属段」下拉、快速输入那一行的 `↑ ↓ ✕`。
+  `AddSegment` 仍然只用于「从这里分支」。
+- **动步骤之前要 `Pin()`，动完要 `Unpin()`。** 没写 `next` 的边含义是「**同一段里的下一步**，
+  没有就回开头算新一轮」——步骤一换段，这条边就改了指向。所以所有重排操作都先把隐式边写成显式
+  `next`，重排完再把和默认值一致的收回去。`SegmentEditingTests` 里每个操作都有一条
+  「重排前后每条默认边的目标完全一致」的断言，改这块时别删。
+- **一个段的步骤在 `Steps` 里必须连续**（`DefaultEdge` 按位置找同段的下一步）。`Reorder()` 负责这件事。
 - **Avalonia 下拉框的坑**：`ItemsSource` 整体换掉时它会清掉选中项并把 null 写回绑定。所以选项列表
   尽量不换（文字固定的"不指定"项、文档维护的 `Options` 只在步骤名变化时刷新），源属性忽略 null，
   刷新后再主动通知一次。`SelectedValue` + `SelectedValueBinding` 在这里没选中过，改用 `SelectedItem`。
@@ -198,6 +210,11 @@ Unity 引擎。测试环境为无边框窗口 3840×2160，4K 显示器 + Window
 - **读数器和轴跟踪器已在真实战斗上离线验证过**（fight1，75 帧 1Hz 全分辨率，用 `replay`）：
   两轮示例轴都跟上了，第二轮在技能点为 0 时正确显示 `1重击` 被条件阻塞。
   **但 App 本身（实时 overlay）还没在游戏机上跑过**；游戏机上的 `serve` 也是旧版，没有 `/hud`。
+- **大字 overlay 只在开发机上拿 Claude 窗口核对过几何**（`--process claude --any-foreground`，
+  4K + 150%：字高实测 205 物理像素 = 客户区高的 0.095，底边落在 0.67，穿透正常）。
+  **白字压不压得住游戏里的亮地面没验过**——底影已经从原规格的 0.15 加到 0.6，但
+  `captures/live/fight1` 那种阳光地面只有在游戏机上才能看出来。真压不住的话下一步是
+  给大字加一层极淡的暗描边，那就离原规格更远了。
 - **窗口化模式的客户区偏移没实测过**。算法和测试都覆盖了（fixture 贴进带边框的画布），
   但 DWM 边框的实际数值只有游戏切到窗口模式才能验证。
 - 长时间运行下的稳定性：游戏切分辨率 / alt-tab / 显示器切换时 `GraphicsCaptureItem`
@@ -252,16 +269,62 @@ Unity 引擎。测试环境为无边框窗口 3840×2160，4K 显示器 + Window
 - **去向**：`next` 指定下一步，没写就是同段的下一个，段尾没写就回到第一步并算新一轮；`newRound`
   让这条边轮数 +1。`branches` 是条件分支：**条件决定提示哪条路，实际走哪条看识别到的操作**
   （玩家不按提示走也跟得上）。停在某步之前，提示会随 HUD 变化重新选路。
-- **段**（`segments`）只是画图用的泳道："开局"、"循环"。示例轴 = 两段 + 两条"下一轮"边。
+- **段**（`segments`）是用户划分的**阶段**："开局"、"循环"。示例轴 = 两段 + 两条"下一轮"边。
+  它既是图上的一条泳道，也是 **overlay 轴显示器一次显示的单位**——所以"一段多长"是用户的编辑决定，
+  程序不需要任何截断或滚动逻辑；一段长到看不过来，是用户该再切一刀。
+  （2026-10-24 从"只是画图用的泳道"升格。）
 - schema 1（`opening` + `cycle` 两个平列表，重击是独立一步）仍能读，读进来自动转换。
 - 快速输入的一行写法：`3 → 2 → 4E → ~1重击 1E → 1 → 2E → 1`，`~` 开头是软提示，
   `~"文字"` 是自定义文字（`RotationText`）。分支和条件不在一行写法里。
 
-### 已定的 overlay 决策（2026-09-13）
+### 已定的 overlay 决策（2026-09-13，大字版 2026-10-24）
 
-- 位置 **A**：角色脚下，屏幕水平居中、约 60% 高度。
+- 位置 **A**：角色脚下，屏幕水平居中；底边压在客户区高度的 **0.67**（见上面的 `OverlayAnchor`）。
+- **下一个该按的键是一块「雷霆大字」**——就是游戏进新区域 / 见 Boss 时那块白色大字。
+  技能画数字 `3`，连携画 `E`（第二行写触发谁），大招画数字、第二行写「长按」。
+  视觉稿是 artifact「Anaphora Overlay」v2。
 - 状态面板**可折叠**，前期展开着用来核对读数对不对。overlay 本身鼠标穿透、不可点，
   所以折叠开关不在 overlay 上。
+- 状态区只剩两行：`接着` 的后三步小块 + 一行轮次/等待条件；技能点 + 四个槽位。
+  **连携提示并进了槽位**——会被 E 触发的槽位在数字牌上方挂白色 `E1`/`E2` 牌，
+  不再有单独一行。头像没匹配到槽位时才退回一行文字（`PromptNote`）。
+
+#### 大字的排版规格（照抄社区生成器）
+
+社区的 [终末地白色大字生成器](https://endfieldtext.ccomm.top/)（GPLv3，原项目
+EndfieldTextGenerator 的 web 移植）把常量写在源码里，**这些数字是抄来的，不是目测**：
+
+| 原规格 | 本工程怎么用 |
+|---|---|
+| 中文 `NotoSansHans-Black` | 就是 Noto Sans SC 900。本工程走系统的 **Microsoft YaHei UI Bold** |
+| 西文 `NovecentoWideUltraBold` | 商业字体，不能发。换成系统自带的 **Arial Black** |
+| 主标题高 = 屏高 `0.2472` | 本工程取 **0.095**（约游戏的 38%），即 1080 下字高 102.6 DIP，`FontSize 143`（Arial Black 的 cap 是 0.7158 em） |
+| 字距 `0.021875`（相对字高 8.9%），西文再 ×`0.35` | `LetterSpacing 3.2` |
+| 第二行 `0.108/0.184`，淡出 `0.3` | 压到主字的 30%：游戏里第二行是地名的下半句，这里是说明文字。**唯一明显偏离原规格的地方** |
+| 萨卡兹副标题 `0.025`，贴 1px，淡出 `0.5` | 保留位置、尺寸比和向右淡出（`OpacityMask`），内容换成 `SKILL` / `CHAIN` / `ULTIMATE` |
+| 底影长短轴 `1.2 : 1`，不透明度 `0.15` | 同比例的 `RadialGradientBrush`，但**加重到 0.6**：游戏放大字时压暗整屏，overlay 不能压暗游戏 |
+
+- **字体全部用系统自带的，不内置任何字体文件。** 大字用 **Arial Black**：比 Segoe UI Black
+  更宽更钝，更接近游戏自己那块 Novecento Wide。退路是 `Segoe UI Black`
+  （`seguibl.ttf`，字形和微软雅黑的西文同源，接缝更小但偏窄）。
+  两者的 `usWeightClass` 都是 900、子族却是 Regular，所以 `FontWeight` 写 `Normal`；
+  写成 `Segoe UI` + `FontWeight="Black"` 拿到的是另一张脸。
+  它不是等宽的，`1` 和 `E` 的卡片宽度略有差别，但 `Place()` 每 100ms 重新居中，动的是边缘不是字。
+- **白字黑边走 `OutlinedText`，不要叠偏移副本。** Avalonia 没有 `text-stroke`，叠八份黑字
+  只会把字加粗，不会给它镶边。`OutlinedText` 用 `FormattedText.BuildGeometry()` 拿到字形轮廓，
+  先 `DrawGeometry(null, pen, …)` 描边再 `DrawGeometry(fill, null, …)` 填充——描边只往外长，
+  字形不变。`FormattedText` 的构造参数里前景画刷**不能传 null**，否则 `BuildGeometry` 给不出东西。
+  字距靠逐个字素排版实现（`FormattedText` 本身没有 letter-spacing），所以带字距的串不是整体整形的；
+  这里都是短标签和数字，没有连字要顾。
+- **想收紧大字的行距，不要用 `LineHeight`——它会把字切掉。** Arial Black 的行盒是
+  `(2254 + 634) / 2048 = 1.41 em`，`FontSize 143` 下有 202 高（字高才 102，上面 55 的行距、
+  基线下 44）。把 `LineHeight` 设成比它小，Avalonia 不是收紧而是裁切，`3` 的下沿会被切平。
+  用**负 `Margin`** 收：动的是版面盒，不动画出来的东西。
+  但**上边的负值不能给太多**：`SizeToContent` 按负边距收缩后的盒子来量窗口，字从盒子上方
+  溢出多少，窗口顶边就压过来多少。`-48` 时 4K 上只剩 6px 余量（1080p 就是 2px），
+  现在用 `-34`，实测余量 36px。
+  想内置字体时只能挑静态 TTF/OTF，而且要 `<AvaloniaResource Include="..." />` 才会打进程序集，
+  引用写 `avares://<程序集>/<目录>#<字体内部族名>`。
 - **重击怎么识别还没有答案**（游戏里重击没有单独按键），之后再讨论。在那之前，
   重击现在是软提示，跟踪器根本不等它。
 - **不读键盘输入。** 步骤是否完成只从画面推断。**全局快捷键不算读键盘**：走 `RegisterHotKey`，
@@ -444,6 +507,10 @@ dotnet run --project src/Anaphora.App
 # 开发机上没有游戏时，拿任意窗口检查 overlay 的定位、缩放与鼠标穿透（读数是假的）。
 # 结果看 %LOCALAPPDATA%\Anaphora\app.log，里面会写 "overlay is click-through"。
 dotnet run --project src/Anaphora.App -- --process claude --any-foreground
+
+# 同上，但 --demo 在 HUD 读不到时顶上一组写死的读数，overlay 就会画成正常态而不是
+# 38% 的失效态——专门用来肉眼看 overlay 长什么样。只看样子，不能拿来判断读数。
+dotnet run --project src/Anaphora.App -- --process claude --any-foreground --demo
 
 # WGC 可行性探针。参数：进程名（默认 Endfield）、输出目录。
 # 打印窗口信息 / display affinity / 帧率 / 亮度统计，并落三张 PNG：全图、1280 宽预览、

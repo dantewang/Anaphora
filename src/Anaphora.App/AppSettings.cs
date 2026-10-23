@@ -10,8 +10,11 @@ internal sealed record AppSettings
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
-    /// <summary>Open by default: early on, the readings need checking against the game.</summary>
-    public bool StatusVisible { get; init; } = true;
+    /// <summary>
+    /// Whether the overlay draws the rotation strip under the title card. On by
+    /// default; off leaves only "what to press now".
+    /// </summary>
+    public bool TrackVisible { get; init; } = true;
 
     /// <summary>
     /// Hide the overlay once the HUD has been unreadable for <see cref="HideAfterSeconds"/>:

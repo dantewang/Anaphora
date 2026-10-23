@@ -19,7 +19,7 @@
     <SolidColorBrush x:Key="Lime" Color="#B8D433" />
     <SolidColorBrush x:Key="Warn" Color="#E5484D" />
     <FontFamily x:Key="Display">Bahnschrift SemiCondensed, Bahnschrift, Microsoft YaHei UI</FontFamily>
-    <FontFamily x:Key="Body">Microsoft YaHei UI, Segoe UI</FontFamily>
+    <FontFamily x:Key="Body">Microsoft YaHei UI, Microsoft YaHei, Segoe UI</FontFamily>
     <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Microsoft YaHei UI</FontFamily>
     <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
     <CornerRadius x:Key="OverlayCornerRadius">0</CornerRadius>
