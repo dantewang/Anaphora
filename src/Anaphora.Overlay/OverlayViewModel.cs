@@ -2,6 +2,7 @@ using System.Globalization;
 using Anaphora.Analysis;
 using Anaphora.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Anaphora.Overlay;
 
@@ -156,6 +157,18 @@ public sealed partial class OverlayViewModel : ObservableObject
     [ObservableProperty]
     public partial bool TrackVisible { get; set; } = true;
 
+    /// <summary>
+    /// The overlay is taking the mouse so it can be dragged somewhere else. It
+    /// draws its own outline and a readout while this is on, because nothing
+    /// else on screen says the overlay is suddenly clickable.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool Positioning { get; set; }
+
+    /// <summary>"水平 50.0%（已吸附中线） · 底边 67.0%".</summary>
+    [ObservableProperty]
+    public partial string PositionText { get; set; } = string.Empty;
+
     /// <summary>The cues that lead into the current step; they are not the key to press.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasCues))]
@@ -176,9 +189,21 @@ public sealed partial class OverlayViewModel : ObservableObject
     [ObservableProperty]
     public partial string StaleText { get; set; } = string.Empty;
 
+    /// <summary>The 复位 button: back to where the overlay starts.</summary>
+    public event Action? ResetPositionRequested;
+
+    /// <summary>The 完成 button: the same thing the hotkey and the tray do.</summary>
+    public event Action? DonePositioningRequested;
+
     public bool HasCues => NowCues.Count > 0;
 
     public bool HasHint => !string.IsNullOrEmpty(Hint);
+
+    [RelayCommand]
+    public void ResetPosition() => ResetPositionRequested?.Invoke();
+
+    [RelayCommand]
+    public void DonePositioning() => DonePositioningRequested?.Invoke();
 
     /// <param name="sinceReadable">How long ago the last readable frame was, for the stale tag.</param>
     public void Apply(HudSnapshot hud, RotationState rotation, TimeSpan sinceReadable)

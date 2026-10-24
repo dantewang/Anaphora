@@ -193,6 +193,58 @@
       <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
 
+    <!-- positioning mode: the overlay is suddenly clickable, and nothing else on
+         screen would say so, so it outlines itself and says what it is doing -->
+    <Style Selector="Border.frame">
+      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Border.corner">
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Border.plate">
+      <Setter Property="Background" Value="{StaticResource Amber}" />
+      <Setter Property="Padding" Value="9,5" />
+    </Style>
+    <Style Selector="Border.plate TextBlock">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="#111111" />
+    </Style>
+    <Style Selector="Border.readout">
+      <Setter Property="Background" Value="#D90A0B0B" />
+      <Setter Property="BorderBrush" Value="#80F0B429" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="9,5" />
+    </Style>
+    <Style Selector="Border.readout TextBlock">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="{StaticResource Amber}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.readout Button">
+      <Setter Property="FontFamily" Value="{StaticResource Body}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="9,4" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Background" Value="#E61B1D1D" />
+      <Setter Property="BorderBrush" Value="#38ECEBE6" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+    </Style>
+    <Style Selector="Border.readout Button.go">
+      <Setter Property="Background" Value="{StaticResource Amber}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+      <Setter Property="Foreground" Value="#111111" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
     <Style Selector="StackPanel.body">
       <Setter Property="Transitions">
         <Transitions>
@@ -207,7 +259,29 @@
 
   <LayoutTransformControl x:Name="Scaler">
     <Panel Margin="0,0,0,24">
-      <StackPanel Classes="body" Classes.stale="{Binding !Live}" Spacing="9" HorizontalAlignment="Center">
+      <!-- The drag chrome takes real room in the layout rather than hanging off
+           the body: SizeToContent measures the laid-out box, so anything that
+           overflows it is simply outside the window and never seen. -->
+      <StackPanel HorizontalAlignment="Center" Spacing="8">
+        <Border Classes="plate" HorizontalAlignment="Left" IsVisible="{Binding Positioning}">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Fill="#111111" VerticalAlignment="Center"
+                  Data="M7,0 L10,3 L8,3 L8,6 L11,6 L11,4 L14,7 L11,10 L11,8 L8,8 L8,11 L10,11 L7,14 L4,11 L6,11 L6,8 L3,8 L3,10 L0,7 L3,4 L3,6 L6,6 L6,3 L4,3 Z" />
+            <TextBlock Text="调整位置 · 拖动放到想要的地方" />
+          </StackPanel>
+        </Border>
+
+        <Panel>
+          <Panel IsVisible="{Binding Positioning}">
+            <Border Classes="frame" />
+            <Border Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top" BorderThickness="2,2,0,0" />
+            <Border Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Top" BorderThickness="0,2,2,0" />
+            <Border Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Bottom" BorderThickness="2,0,0,2" />
+            <Border Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Bottom" BorderThickness="0,0,2,2" />
+          </Panel>
+
+          <StackPanel Classes="body" Classes.stale="{Binding !Live}" Spacing="9" HorizontalAlignment="Center"
+                      Margin="6">
 
         <StackPanel HorizontalAlignment="Center">
           <ItemsControl ItemsSource="{Binding NowCues}" ItemTemplate="{StaticResource CueChip}"
@@ -284,6 +358,16 @@
           <Border Width="27" Height="2" Background="{StaticResource Amber}"
                   HorizontalAlignment="Left" VerticalAlignment="Top" />
         </Panel>
+          </StackPanel>
+        </Panel>
+
+        <Border Classes="readout" HorizontalAlignment="Center" IsVisible="{Binding Positioning}">
+          <StackPanel Orientation="Horizontal" Spacing="9">
+            <TextBlock Text="{Binding PositionText}" />
+            <Button Content="复位" Command="{Binding ResetPositionCommand}" />
+            <Button Classes="go" Content="完成" Command="{Binding DonePositioningCommand}" />
+          </StackPanel>
+        </Border>
       </StackPanel>
 
       <Border IsVisible="{Binding !Live}" HorizontalAlignment="Left" VerticalAlignment="Bottom"

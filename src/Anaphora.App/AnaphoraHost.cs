@@ -46,6 +46,7 @@ internal sealed class AnaphoraHost : IDisposable
 
     private RotationTracker tracker;
     private GlobalHotkey? resetHotkey;
+    private GlobalHotkey? moveHotkey;
     private AppSettings settings;
     private HudCapture? capture;
     private nint game;
@@ -74,8 +75,11 @@ internal sealed class AnaphoraHost : IDisposable
 
         Rotation rotation = FirstRotation();
         tracker = new RotationTracker(rotation);
-        surface = new AvaloniaOverlaySurface(OverlayAnchor.AboveBottomHud);
+        surface = new AvaloniaOverlaySurface(settings.OverlayAnchor?.ToAnchor() ?? OverlayAnchor.AboveBottomHud);
         surface.Model.TrackVisible = settings.TrackVisible;
+        surface.AnchorChanged += a => UpdateSettings(settings with { OverlayAnchor = AnchorSetting.From(a) });
+        surface.Model.ResetPositionRequested += () => surface.MoveTo(OverlayAnchor.AboveBottomHud);
+        surface.Model.DonePositioningRequested += () => SetPositioning(false);
         surface.Model.Apply(HudSnapshot.Absent, tracker.State, TimeSpan.Zero);
         surface.Model.ShowWaiting("等待游戏窗口");
 
@@ -112,6 +116,8 @@ internal sealed class AnaphoraHost : IDisposable
     /// <summary>The reset hotkey as the tray should show it, or null when there is none.</summary>
     public string? ResetHotkeyText => resetHotkey?.Gesture.Text;
 
+    public string? MoveHotkeyText => moveHotkey?.Gesture.Text;
+
     public void Start()
     {
         discovery.Start();
@@ -131,7 +137,7 @@ internal sealed class AnaphoraHost : IDisposable
         settings.Save();
 
         surface.Model.TrackVisible = settings.TrackVisible;
-        if (previous.ResetHotkey != settings.ResetHotkey)
+        if (previous.ResetHotkey != settings.ResetHotkey || previous.MoveHotkey != settings.MoveHotkey)
         {
             RegisterHotkey();
         }
@@ -250,6 +256,41 @@ internal sealed class AnaphoraHost : IDisposable
         {
             Log.Write($"[warn] reset hotkey \"{settings.ResetHotkey}\" not understood; expected e.g. Ctrl+Alt+R or Shift+F9");
         }
+
+        moveHotkey?.Dispose();
+        moveHotkey = null;
+
+        if (HotkeyGesture.Parse(settings.MoveHotkey) is { } move)
+        {
+            moveHotkey = new GlobalHotkey(move);
+            moveHotkey.Pressed += () => Dispatcher.UIThread.Post(() => SetPositioning(!Positioning));
+        }
+        else if (!string.IsNullOrWhiteSpace(settings.MoveHotkey))
+        {
+            Log.Write($"[warn] move hotkey \"{settings.MoveHotkey}\" not understood; expected e.g. Ctrl+Alt+M or Shift+F9");
+        }
+    }
+
+    /// <summary>The overlay is taking the mouse so it can be dragged somewhere else.</summary>
+    public bool Positioning => surface.Positioning;
+
+    /// <summary>
+    /// Turning this on takes the mouse and pins the overlay on screen: the
+    /// "hide when the HUD is gone" and "hide when the game is not in front"
+    /// rules are both suspended, because an overlay that vanishes under the
+    /// pointer cannot be positioned.
+    /// </summary>
+    public void SetPositioning(bool on)
+    {
+        if (surface.Positioning == on)
+        {
+            return;
+        }
+
+        surface.Positioning = on;
+        Log.Write(on ? "positioning: overlay takes the mouse" : $"positioning done at {surface.Anchor.Describe()}");
+        Place();
+        SettingsChanged?.Invoke();
     }
 
 
@@ -258,6 +299,7 @@ internal sealed class AnaphoraHost : IDisposable
         discovery.Stop();
         placement.Stop();
         resetHotkey?.Dispose();
+        moveHotkey?.Dispose();
         StopCapture("shutting down");
         surface.Dispose();
     }
@@ -319,16 +361,28 @@ internal sealed class AnaphoraHost : IDisposable
 
     private void Place()
     {
-        Anaphora.Core.PixelRect? client = game == 0 ? null : GameWindowGeometry.ClientAreaOnScreen(game, options.RequireForeground);
+        // While positioning, the overlay stays put whether or not the game is in
+        // front: the user may well be dragging it from another window.
+        bool moving = surface.Positioning;
+        Anaphora.Core.PixelRect? client = game == 0
+            ? null
+            : GameWindowGeometry.ClientAreaOnScreen(game, options.RequireForeground && !moving);
 
         // Held only while the game is in front: a registered combination is
-        // taken away from every other program.
+        // taken away from every other program. The move hotkey stays while
+        // positioning, or there would be no way back out of it by key.
         if (resetHotkey is not null)
         {
             resetHotkey.Enabled = client is not null;
         }
 
-        bool hudGone = settings.HideWhenHudAbsent && SinceReadable > TimeSpan.FromSeconds(settings.HideAfterSeconds);
+        if (moveHotkey is not null)
+        {
+            moveHotkey.Enabled = client is not null || moving;
+        }
+
+        bool hudGone = !moving && settings.HideWhenHudAbsent
+            && SinceReadable > TimeSpan.FromSeconds(settings.HideAfterSeconds);
         surface.Place(hudGone ? null : client);
 
         if (!checkedClickThrough && game != 0 && surface.Handle != 0)

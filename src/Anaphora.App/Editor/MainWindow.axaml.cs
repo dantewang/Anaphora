@@ -97,10 +97,24 @@ internal sealed partial class MainWindow : Window, IFileAccess
             return;
         }
 
+        // Which box: the Tag says which setting this one edits.
+        bool move = (sender as Control)?.Tag as string == "move";
+        void Set(string value)
+        {
+            if (move)
+            {
+                model.Settings.MoveHotkey = value;
+            }
+            else
+            {
+                model.Settings.ResetHotkey = value;
+            }
+        }
+
         e.Handled = true;
         if (e.Key is Key.Back or Key.Delete)
         {
-            model.Settings.ResetHotkey = string.Empty;
+            Set(string.Empty);
             return;
         }
 
@@ -140,7 +154,7 @@ internal sealed partial class MainWindow : Window, IFileAccess
         }
 
         parts.Add(key);
-        model.Settings.ResetHotkey = string.Join('+', parts);
+        Set(string.Join('+', parts));
     }
 }
 

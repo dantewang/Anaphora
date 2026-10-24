@@ -37,6 +37,28 @@ internal static class Win32Window
         PInvoke.SetLayeredWindowAttributes(hwnd, new COLORREF(0), 255, LAYERED_WINDOW_ATTRIBUTES_FLAGS.LWA_ALPHA);
     }
 
+    /// <summary>
+    /// Turns the mouse on or off for this window, by that one style bit. The
+    /// rest of <see cref="MakeClickThrough"/> stays put -- NOACTIVATE above all,
+    /// so that taking the mouse to drag the overlay does not take the foreground
+    /// away from the game.
+    /// </summary>
+    public static void SetClickThrough(nint handle, bool through)
+    {
+        if (handle == 0)
+        {
+            return;
+        }
+
+        var hwnd = new HWND(handle);
+        int style = PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+        int transparent = (int)WINDOW_EX_STYLE.WS_EX_TRANSPARENT;
+        PInvoke.SetWindowLong(
+            hwnd,
+            WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE,
+            through ? style | transparent : style & ~transparent);
+    }
+
     public static void Show(nint handle, int x, int y) =>
         PInvoke.SetWindowPos(
             new HWND(handle),

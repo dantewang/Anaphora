@@ -334,6 +334,19 @@ EndfieldTextGenerator 的 web 移植）把常量写在源码里，**这些数字
   注册了的组合会从所有程序（包括游戏）手里拿走，所以**只在游戏在前台时注册**，切走就注销。
   `RegisterHotKey` 把 `WM_HOTKEY` 投给注册它的线程，而 UI 线程的消息循环归 Avalonia 管，
   所以快捷键有自己的线程和消息循环（`GlobalHotkey`）。被别的程序占用时 `app.log` 里有 `[warn]`。
+- **「调整位置」模式**（2026-10-24）：`Ctrl+Alt+M`（`moveHotkey` 可改）、托盘、设定页三个入口。
+  开着的时候**只去掉 `WS_EX_TRANSPARENT` 一位**（`Win32Window.SetClickThrough`），
+  `WS_EX_NOACTIVATE` 留着，所以 overlay 接管鼠标但**游戏不丢前台**；同时忽略
+  `hideWhenHudAbsent` 和「游戏不在前台就隐藏」，否则一松手它就没了。退出是再按一次快捷键、
+  点 overlay 上的「完成」、或托盘——**没有 Esc**，`NOACTIVATE` 的窗口拿不到键盘焦点。
+  拖动自己实现（记 `PointerPressed` 的屏幕点，`PointerMoved` 算增量写回锚点），
+  不用 `BeginMoveDrag`：那会走系统的移动循环、可能抢前台。
+- **位置存成归一化锚点** `overlayAnchor: { x, y }`：x 是窗口水平中心、y 是底边，
+  和 ROI 坐标同一套道理，换分辨率不用重标。**吸附中线只对累计的原始位置判一次，
+  不能每个增量都判**——拖动是一串小位移，每步 30px 都在 1% 容差里，逐帧吸附会把每一步都撤销，
+  慢慢拖永远离不开中线。所以 surface 里留一个未吸附的 `raw`，显示和摆放用 `raw.Snapped()`。
+- **定位模式的边框、提示牌、读数条必须占真实版面**，不能用负边距挂在 overlay 外面——
+  又是 `SizeToContent` 那个坑：它只量版面盒，溢出的部分就在窗口外，一个像素都看不见。
 - **HUD 读不到一段时间后自动隐藏 overlay**（地图、背包、战斗之间跑图）：`hideWhenHudAbsent`
   默认开，`hideAfterSeconds` 默认 5 秒，要长过大招特写，免得闪。托盘里有开关，
   以后挪到主界面（调设定、编辑/导入轴）。刚开始抓取时算作"刚读到过"，先显示 5 秒再判断。

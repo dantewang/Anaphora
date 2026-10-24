@@ -1,6 +1,19 @@
 using System.Text.Json;
+using Anaphora.Overlay;
 
 namespace Anaphora.App;
+
+/// <summary>
+/// Where the overlay sits, as fractions of the game's client area: x is its
+/// horizontal centre, y its bottom edge. Normalised for the same reason ROI
+/// coordinates are -- changing resolution or going windowed must not move it.
+/// </summary>
+internal sealed record AnchorSetting(double X, double Y)
+{
+    public static AnchorSetting From(OverlayAnchor anchor) => new(anchor.X, anchor.Y);
+
+    public OverlayAnchor ToAnchor() => new(X, Y);
+}
 
 /// <summary>What the user changed and expects to find again next time.</summary>
 internal sealed record AppSettings
@@ -27,6 +40,15 @@ internal sealed record AppSettings
 
     /// <summary>Sends the rotation back to its start. Empty turns the hotkey off.</summary>
     public string? ResetHotkey { get; init; } = "Ctrl+Alt+R";
+
+    /// <summary>
+    /// Turns dragging the overlay on and off. Empty turns the hotkey off, and
+    /// the tray still has the switch.
+    /// </summary>
+    public string? MoveHotkey { get; init; } = "Ctrl+Alt+M";
+
+    /// <summary>Where the user dragged the overlay to; null means the default place.</summary>
+    public AnchorSetting? OverlayAnchor { get; init; }
 
     /// <summary>The id of the library rotation the overlay follows.</summary>
     public string ActiveRotation { get; init; } = "endfield-example";

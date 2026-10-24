@@ -813,6 +813,16 @@
                 <TextBlock Classes="dim" Text="点一下框再按新组合，退格清除。只在游戏在前台时生效。" />
               </StackPanel>
             </DockPanel>
+            <DockPanel>
+              <TextBox DockPanel.Dock="Right" Width="150" Classes="mono" IsReadOnly="True" Tag="move"
+                       HorizontalContentAlignment="Center" Text="{Binding Settings.MoveHotkey}"
+                       PlaceholderText="未设置" KeyDown="OnHotkeyKeyDown" />
+              <StackPanel Spacing="2">
+                <TextBlock Text="调整 overlay 位置" />
+                <TextBlock Classes="dim" TextWrapping="Wrap"
+                           Text="开了之后 overlay 接管鼠标，拖到想要的地方，再按一次或点它上面的「完成」退出。游戏战斗中常把光标锁住，那时要先开个菜单放开鼠标。" />
+              </StackPanel>
+            </DockPanel>
             <TextBlock FontSize="12" Foreground="{StaticResource Warn}" Text="{Binding Settings.HotkeyError}"
                        IsVisible="{Binding Settings.HotkeyError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>

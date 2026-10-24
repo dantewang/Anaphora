@@ -75,6 +75,9 @@ public partial class App : Application
         var hide = new NativeMenuItem("读不到 HUD 时隐藏") { ToggleType = MenuItemToggleType.CheckBox };
         hide.Click += (_, _) => host.UpdateSettings(host.Settings with { HideWhenHudAbsent = !host.Settings.HideWhenHudAbsent });
 
+        var move = new NativeMenuItem("调整 overlay 位置") { ToggleType = MenuItemToggleType.CheckBox };
+        move.Click += (_, _) => host.SetPositioning(!host.Positioning);
+
         var reset = new NativeMenuItem();
         reset.Click += (_, _) => host.ResetRotation();
 
@@ -96,6 +99,8 @@ public partial class App : Application
         {
             status.IsChecked = host.Settings.TrackVisible;
             hide.IsChecked = host.Settings.HideWhenHudAbsent;
+            move.IsChecked = host.Positioning;
+            move.Header = host.MoveHotkeyText is { } mover ? $"调整 overlay 位置（{mover}）" : "调整 overlay 位置";
             reset.Header = host.ResetHotkeyText is { } hotkey ? $"轴回到开头（{hotkey}）" : "轴回到开头";
         }
 
@@ -106,7 +111,7 @@ public partial class App : Application
         {
             Icon = DrawIcon(),
             ToolTipText = "Anaphora",
-            Menu = [open, new NativeMenuItemSeparator(), status, hide, new NativeMenuItemSeparator(), reset, skip, new NativeMenuItemSeparator(), exit],
+            Menu = [open, new NativeMenuItemSeparator(), status, hide, move, new NativeMenuItemSeparator(), reset, skip, new NativeMenuItemSeparator(), exit],
         };
         tray.Clicked += (_, _) => ShowWindow();
         return tray;

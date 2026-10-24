@@ -679,6 +679,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public partial string ResetHotkey { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial string MoveHotkey { get; set; } = string.Empty;
+
+    [ObservableProperty]
     public partial string? HotkeyError { get; set; }
 
     partial void OnTrackVisibleChanged(bool value) => Store(host.Settings with { TrackVisible = value });
@@ -699,6 +702,18 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Store(host.Settings with { ResetHotkey = value });
     }
 
+    partial void OnMoveHotkeyChanged(string value)
+    {
+        if (!string.IsNullOrEmpty(value) && HotkeyGesture.Parse(value) is null)
+        {
+            HotkeyError = "写成 Ctrl+Alt+M 这样：修饰键加一个字母、数字或 F1–F24";
+            return;
+        }
+
+        HotkeyError = null;
+        Store(host.Settings with { MoveHotkey = value });
+    }
+
     private void Store(AppSettings updated)
     {
         if (!loading)
@@ -714,6 +729,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         HideWhenHudAbsent = host.Settings.HideWhenHudAbsent;
         HideAfterSeconds = (decimal)host.Settings.HideAfterSeconds;
         ResetHotkey = host.Settings.ResetHotkey ?? string.Empty;
+        MoveHotkey = host.Settings.MoveHotkey ?? string.Empty;
         loading = false;
     }
 }
