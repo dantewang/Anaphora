@@ -186,6 +186,15 @@ public sealed partial class OverlayViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasHint))]
     public partial string? Hint { get; set; }
 
+    /// <summary>
+    /// The last key no step explained, for a moment after it: "按了 3 技能 ·
+    /// 不是这一步". Without it, pressing the wrong slot looks exactly like the
+    /// overlay not noticing anything at all.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMisfire))]
+    public partial string? Misfire { get; set; }
+
     [ObservableProperty]
     public partial string StaleText { get; set; } = string.Empty;
 
@@ -199,6 +208,8 @@ public sealed partial class OverlayViewModel : ObservableObject
 
     public bool HasHint => !string.IsNullOrEmpty(Hint);
 
+    public bool HasMisfire => !string.IsNullOrEmpty(Misfire);
+
     [RelayCommand]
     public void ResetPosition() => ResetPositionRequested?.Invoke();
 
@@ -206,7 +217,8 @@ public sealed partial class OverlayViewModel : ObservableObject
     public void DonePositioning() => DonePositioningRequested?.Invoke();
 
     /// <param name="sinceReadable">How long ago the last readable frame was, for the stale tag.</param>
-    public void Apply(HudSnapshot hud, RotationState rotation, TimeSpan sinceReadable)
+    /// <param name="misfire">The last key no step explained, while it is worth showing.</param>
+    public void Apply(HudSnapshot hud, RotationState rotation, TimeSpan sinceReadable, Observation? misfire = null)
     {
         ArgumentNullException.ThrowIfNull(hud);
         ArgumentNullException.ThrowIfNull(rotation);
@@ -227,6 +239,7 @@ public sealed partial class OverlayViewModel : ObservableObject
                 TrackCell.From(view, isNow: i + 1 == rotation.Position, isDone: i + 1 < rotation.Position)),
         ];
         Hint = HintFor(rotation);
+        Misfire = misfire is { } wrong ? $"按了 {wrong} · 不是这一步" : null;
     }
 
     /// <summary>Shown when there is nothing to read: no game, or capture not running.</summary>
@@ -234,6 +247,7 @@ public sealed partial class OverlayViewModel : ObservableObject
     {
         Live = false;
         StaleText = message;
+        Misfire = null;
     }
 
     private static string? HintFor(RotationState rotation)

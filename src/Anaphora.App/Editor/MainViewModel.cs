@@ -676,6 +676,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public partial decimal HideAfterSeconds { get; set; }
 
     [ObservableProperty]
+    public partial decimal UltimateHoldMs { get; set; }
+
+    [ObservableProperty]
     public partial string ResetHotkey { get; set; } = string.Empty;
 
     [ObservableProperty]
@@ -689,6 +692,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
     partial void OnHideWhenHudAbsentChanged(bool value) => Store(host.Settings with { HideWhenHudAbsent = value });
 
     partial void OnHideAfterSecondsChanged(decimal value) => Store(host.Settings with { HideAfterSeconds = (double)Math.Clamp(value, 1, 60) });
+
+    partial void OnUltimateHoldMsChanged(decimal value) => Store(host.Settings with
+    {
+        UltimateHoldMs = (int)Math.Clamp(value, AppSettings.MinUltimateHoldMs, AppSettings.MaxUltimateHoldMs),
+    });
 
     partial void OnResetHotkeyChanged(string value)
     {
@@ -728,6 +736,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         TrackVisible = host.Settings.TrackVisible;
         HideWhenHudAbsent = host.Settings.HideWhenHudAbsent;
         HideAfterSeconds = (decimal)host.Settings.HideAfterSeconds;
+        UltimateHoldMs = host.Settings.UltimateHoldMs;
         ResetHotkey = host.Settings.ResetHotkey ?? string.Empty;
         MoveHotkey = host.Settings.MoveHotkey ?? string.Empty;
         loading = false;

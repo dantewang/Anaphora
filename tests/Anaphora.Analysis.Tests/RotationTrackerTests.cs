@@ -4,7 +4,9 @@ namespace Anaphora.Analysis.Tests;
 
 /// <summary>
 /// Walks the user's example rotation -- 3, 2, 4E, (1重击) 1E, 1, 2E, 1 -- through
-/// scripted HUD snapshots, the way the capture pipeline would feed them.
+/// scripted frames and key casts, the way the capture pipeline and the keyboard
+/// listener would feed them. The keys are what move the cursor; the frames only
+/// say what is possible at the time.
 /// </summary>
 public class RotationTrackerTests
 {
@@ -31,34 +33,34 @@ public class RotationTrackerTests
         var tracker = new RotationTracker(Example);
         var hud = new Hud(3);
 
-        See(tracker, hud);                                // first readable frame: baseline only
+        See(tracker, hud);
         Assert.Equal("3", Now(tracker));
 
-        See(tracker, hud with { Sp = 2 });                // 3
+        See(tracker, hud with { Sp = 2 }, [Skill(3)]);
         Assert.Equal("2", Now(tracker));
 
-        See(tracker, hud with { Sp = 1 });                // 2 -> offers 4's chain
+        See(tracker, hud with { Sp = 1 }, [Skill(2)]);
         Assert.Equal("4E", Now(tracker));
 
-        See(tracker, hud with { Sp = 1, Chain4 = false }); // 4E
+        See(tracker, hud with { Sp = 1, Chain4 = false }, [Chain(4)]);
         Assert.Equal("1E", Now(tracker));
         Assert.Equal([SoftCue.Heavy(1)], tracker.State.Current.Step.Before);
 
-        // The heavy attack shows nothing; it is a cue on 1E, which it triggers.
-        RotationState afterChain = See(tracker, hud with { Sp = 1, Chain4 = false, Chain1 = false });
+        // The heavy attack has no key; it is a cue on 1E, which it triggers.
+        RotationState afterChain = See(tracker, hud with { Sp = 1, Chain4 = false, Chain1 = false }, [Chain(1)]);
         Assert.Equal(["1E"], afterChain.Completed.Select(s => s.Action.ToString()));
         Assert.Equal("1", Now(tracker));
 
-        See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false });                 // 1
+        See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false }, [Skill(1)]);
         Assert.Equal("2E", Now(tracker));
 
-        See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false, Chain2 = false }); // 2E
+        See(tracker, hud with { Sp = 0, Chain1 = false, Chain2 = false }, [Chain(2)]);
         Assert.Equal("1", Now(tracker));
 
-        See(tracker, hud with { Sp = 1, Chain4 = false, Chain1 = false, Chain2 = false }); // regen: no step
+        See(tracker, hud with { Sp = 1, Chain1 = false, Chain2 = false }); // regen: no key, no step
         Assert.Equal("1", Now(tracker));
 
-        See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false, Chain2 = false }); // 1
+        See(tracker, hud with { Sp = 0, Chain1 = false, Chain2 = false }, [Skill(1)]);
         Assert.Equal(new RotationCursor(Example.IndexOf("c1"), 2), tracker.State.Cursor);
         Assert.Equal("循环", tracker.State.SegmentName);
         Assert.Equal("3", Now(tracker));
@@ -95,186 +97,21 @@ public class RotationTrackerTests
     }
 
     [Fact]
-    public void AnAnonymousSkillPointNeverJumpsAChain()
+    public void TheHudAloneNeverCompletesAStep()
     {
+        // Every trace a cast leaves on screen at once: a skill point gone, a
+        // chain cooling down, an ultimate spent. Without a key, none of it
+        // moves the cursor -- a point is shared by the team and cannot say
+        // whose skill it was, so believing the picture is how a mispress gets
+        // rewarded.
         var tracker = new RotationTracker(Example);
-        AdvanceTo(tracker, "o3"); // at 4E
+        See(tracker, new Hud(3));
 
-        See(tracker, new Hud(2));
-        RotationState state = See(tracker, new Hud(1));
-
-        Assert.Equal("4E", Now(tracker));
-        Assert.Equal([new Observation(ObservedKind.SkillSpent, 0)], state.Unexpected);
-    }
-
-    [Fact]
-    public void AChainRecoversFromMissedSkills()
-    {
-        // Skills whose cost is less than a whole segment go unseen. The chain
-        // they led to still names its slot, so the cursor catches up.
-        var tracker = new RotationTracker(Example);
-        var hud = new Hud(2);
-
-        See(tracker, hud);
-        RotationState state = See(tracker, hud with { Chain4 = false });
-
-        Assert.Equal(["3", "2", "4E"], state.Completed.Select(s => s.Action.ToString()));
-        Assert.Equal("1E", Now(tracker));
-    }
-
-    [Fact]
-    public void AChainTooFarAheadIsReportedNotChased()
-    {
-        var tracker = new RotationTracker(Example);
-        var hud = new Hud(3);
-
-        See(tracker, hud);
-        RotationState state = See(tracker, hud with { Chain2 = false }); // 2E is five steps away
+        RotationState state = See(tracker, new Hud(2) with { Chain4 = false, Ult1 = true });
 
         Assert.Equal("3", Now(tracker));
-        Assert.Equal([new Observation(ObservedKind.ChainUsed, 2)], state.Unexpected);
-    }
-
-    [Fact]
-    public void AnUltimateCutInFreezesTheCursorAndItsUseIsSeenAfterwards()
-    {
-        var tracker = new RotationTracker(Linear("3 2大招 4E"));
-        var hud = new Hud(3) with { Ult2 = true };
-
-        See(tracker, hud);
-        See(tracker, hud with { Sp = 2 });
-        Assert.Equal("2大招", Now(tracker));
-
-        RotationState during = See(tracker, Hud.Absent, TimeSpan.FromSeconds(2));
-        Assert.True(during.Stale);
-        Assert.Equal("2大招", during.Current.Step.Action.ToString());
-
-        See(tracker, hud with { Sp = 2, Ult2 = false }, TimeSpan.FromSeconds(1));
-        Assert.Equal("4E", Now(tracker));
-    }
-
-    [Fact]
-    public void ALongAbsenceStartsTheNextFightAtTheFirstStep()
-    {
-        var tracker = new RotationTracker(Example);
-        var hud = new Hud(3);
-
-        See(tracker, hud);
-        See(tracker, hud with { Sp = 2 });
-        Assert.Equal("2", Now(tracker));
-
-        See(tracker, Hud.Absent, TimeSpan.FromSeconds(10));
-        See(tracker, hud with { Sp = 1 }, TimeSpan.FromSeconds(1));
-
-        // Reset, and the new baseline is taken without reading the drop as a step.
-        Assert.Equal(new RotationCursor(0, 1), tracker.State.Cursor);
-    }
-
-    [Fact]
-    public void StartingOverMidFightIsPickedUp()
-    {
-        // The user's report: off the rotation, then back to the top without
-        // leaving the fight. Stepping forward from the old cursor never catches
-        // up; the tracker has to notice where the inputs fit.
-        var tracker = new RotationTracker(Example);
-        var hud = new Hud(3);
-
-        See(tracker, hud);
-        See(tracker, hud with { Sp = 2 });                                 // 3
-        See(tracker, hud with { Sp = 1 });                                 // 2
-        See(tracker, hud with { Sp = 1, Chain4 = false });                 // 4E
-        See(tracker, hud with { Sp = 1, Chain4 = false, Chain1 = false }); // 1重击 1E
-        See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false }); // 1
-        Assert.Equal("2E", Now(tracker));
-
-        // Lost the plot: start over with 3, 2, 4E while 2E is still expected.
-        See(tracker, hud with { Sp = 3, Chain4 = true, Chain1 = false });  // points and 4's chain came back
-        See(tracker, hud with { Sp = 2, Chain1 = false });                 // 3 -- unexplained
-        See(tracker, hud with { Sp = 1, Chain1 = false });                 // 2 -- unexplained
-        Assert.Equal("2E", Now(tracker));
-        Assert.False(tracker.State.Resynced);
-
-        RotationState state = See(tracker, hud with { Sp = 1, Chain1 = false, Chain4 = false }); // 4E
-
-        // The opening happens once, so starting over is the cycle's next round.
-        Assert.True(state.Resynced);
-        Assert.Equal("1E", Now(tracker));
-        Assert.Equal(new RotationCursor(Example.IndexOf("c4"), 2), state.Cursor);
-    }
-
-    [Fact]
-    public void TwoFittingInputsAreNotEnoughToRealign()
-    {
-        // 3 then 2E fits "…1, 2E" -- but two inputs are too little evidence to
-        // throw the cursor across the rotation.
-        var tracker = new RotationTracker(Example);
-        var hud = new Hud(3);
-
-        See(tracker, hud);
-        See(tracker, hud with { Sp = 2 });
-        RotationState state = See(tracker, hud with { Sp = 2, Chain2 = false });
-
-        Assert.False(state.Resynced);
-        Assert.Equal("2", Now(tracker));
-    }
-
-    [Fact]
-    public void APlayerWhoIsOnTrackIsNeverMoved()
-    {
-        // Following the rotation exactly produces no realignments at all.
-        var tracker = new RotationTracker(Example);
-        var hud = new Hud(3);
-
-        var states = new List<RotationState>
-        {
-            See(tracker, hud),
-            See(tracker, hud with { Sp = 2 }),
-            See(tracker, hud with { Sp = 1 }),
-            See(tracker, hud with { Sp = 1, Chain4 = false }),
-            See(tracker, hud with { Sp = 1, Chain4 = false, Chain1 = false }),
-            See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false }),
-            See(tracker, hud with { Sp = 0, Chain4 = false, Chain1 = false, Chain2 = false }),
-        };
-
-        Assert.DoesNotContain(states, s => s.Resynced);
-    }
-
-    [Fact]
-    public void ABranchIsSuggestedWhileItsConditionHolds()
-    {
-        // After 2E: if 4 leads the chain prompt, take 4E; otherwise press 1.
-        var tracker = new RotationTracker(Branching);
-        var hud = new Hud(3);
-
-        See(tracker, hud);
-        See(tracker, hud with { Sp = 2 });                          // 3
-        See(tracker, hud with { Sp = 2, Chain2 = false });          // 2E
-        Assert.Equal("1", Now(tracker));
-
-        See(tracker, hud with { Sp = 2, Chain2 = false, Lead = 4 });
-        Assert.Equal("4E", Now(tracker));
-
-        // The prompt going away changes the suggestion back.
-        See(tracker, hud with { Sp = 2, Chain2 = false });
-        Assert.Equal("1", Now(tracker));
-    }
-
-    [Fact]
-    public void TheWayThePlayerActuallyGoesWins()
-    {
-        var tracker = new RotationTracker(Branching);
-        var hud = new Hud(3);
-
-        See(tracker, hud);
-        See(tracker, hud with { Sp = 2 });                          // 3
-        See(tracker, hud with { Sp = 2, Chain2 = false });          // 2E
-        Assert.Equal("1", Now(tracker));
-
-        // 1 was suggested, but 4's chain went: that is the branch.
-        RotationState state = See(tracker, hud with { Sp = 2, Chain2 = false, Chain4 = false });
-
+        Assert.Empty(state.Completed);
         Assert.Empty(state.Unexpected);
-        Assert.Equal("3大招", Now(tracker));
     }
 
     [Fact]
@@ -292,22 +129,7 @@ public class RotationTrackerTests
     }
 
     [Fact]
-    public void AHudTraceWithoutAKeyDoesNotMoveTheCursor()
-    {
-        // Key wins: the skill point went on screen, but no key was pressed, so
-        // the step is not taken to have happened.
-        var tracker = new RotationTracker(Example);
-        See(tracker, new Hud(3));
-
-        RotationState state = See(tracker, new Hud(2), []);
-
-        Assert.Equal("3", Now(tracker));
-        Assert.Empty(state.Completed);
-        Assert.Empty(state.Unexpected);
-    }
-
-    [Fact]
-    public void AKeyNamesItsSlotAndCannotBeMistakenForAnother()
+    public void TheWrongSlotLeavesTheCursorWhereItIs()
     {
         var tracker = new RotationTracker(Linear("3 2"));
         See(tracker, new Hud(3));
@@ -315,79 +137,248 @@ public class RotationTrackerTests
         RotationState state = See(tracker, new Hud(3), [Skill(1)]);
 
         Assert.Equal("3", Now(tracker));
-        Assert.Equal([new Observation(ObservedKind.SkillUsed, 1)], state.Unexpected);
+        Assert.Empty(state.Completed);
+        Assert.Equal([new Observation(CastKind.Skill, 1)], state.Unexpected);
     }
 
     [Fact]
-    public void ASlotSpecificKeyRecoversAMissedEarlierSkill()
+    public void AKeyForALaterStepDoesNotPullTheCursorForward()
     {
-        // Same recovery the HUD path has for a chain, now for a skill: the key
-        // says 2, and 2 is one step on, so 3 is taken as already done.
+        // 2 is the step after this one. Taking it would mean a player who
+        // pressed the wrong key, or pressed early, silently loses a step.
         var tracker = new RotationTracker(Linear("3 2 4E"));
         See(tracker, new Hud(3));
 
         RotationState state = See(tracker, new Hud(3), [Skill(2)]);
 
-        Assert.Equal("4E", Now(tracker));
-        Assert.Equal(["3", "2"], state.Completed.Select(s => s.Action.ToString()));
+        Assert.Equal("3", Now(tracker));
+        Assert.Equal([new Observation(CastKind.Skill, 2)], state.Unexpected);
     }
 
     [Fact]
-    public void AnUnknownChainTakesTheNearestChainStep()
+    public void AChainFurtherAlongIsReportedNotChased()
     {
-        var tracker = new RotationTracker(Linear("3 2 4E"));
+        var tracker = new RotationTracker(Example);
         See(tracker, new Hud(3));
-        See(tracker, new Hud(3), [Skill(3)]);
-        See(tracker, new Hud(3), [Skill(2)]);
-        Assert.Equal("4E", Now(tracker));
 
-        RotationState state = See(tracker, new Hud(3), [Chain(0)]);
+        RotationState state = See(tracker, new Hud(3), [Chain(2)]);
 
         Assert.Equal("3", Now(tracker));
+        Assert.Equal([new Observation(CastKind.Chain, 2)], state.Unexpected);
+    }
+
+    [Fact]
+    public void AnUnnamedChainTakesTheChainStepAtHand()
+    {
+        var tracker = new RotationTracker(Linear("3 2 4E"));
+        var hud = new Hud(3);
+        See(tracker, hud);
+        See(tracker, hud, [Skill(3)]);
+        See(tracker, hud, [Skill(2)]);
+        Assert.Equal("4E", Now(tracker));
+
+        RotationState state = See(tracker, hud, [Chain(0)]);
+
         Assert.Equal(["4E"], state.Completed.Select(s => s.Action.ToString()));
     }
 
     [Fact]
     public void EIsNamedByTheLeadingPrompt()
     {
-        // E alone cannot say whose chain it was. The prompt does: 2 leads, so
-        // this is 2E even if 1E was the nearest chain step.
-        var tracker = new RotationTracker(Linear("1E 2E"));
+        // E alone cannot say whose chain it was; the prompt can. 2 leads, so
+        // this press is 2E -- and is not 1E, however near that step is.
+        var tracker = new RotationTracker(Linear("2E"));
         var hud = new Hud(3) with { Lead = 2 };
         See(tracker, hud);
 
         RotationState state = See(tracker, hud, [Chain(0)]);
+        Assert.Equal(["2E"], state.Completed.Select(s => s.Action.ToString()));
 
-        Assert.Equal(["1E", "2E"], state.Completed.Select(s => s.Action.ToString()));
+        var other = new RotationTracker(Linear("2E"));
+        See(other, hud with { Lead = 1 });
+        RotationState wrong = See(other, hud with { Lead = 1 }, [Chain(0)]);
+
+        Assert.Equal("2E", Now(other));
+        Assert.Equal([new Observation(CastKind.Chain, 1)], wrong.Unexpected);
     }
 
     [Fact]
-    public void AKeyFromTheOldFightDoesNotStartTheNewOne()
+    public void AnUltimateIsSeenThroughItsOwnCutIn()
     {
+        // The press that hides the HUD is exactly the one that must not be
+        // dropped: the cut-in starts before the next frame is captured.
+        var tracker = new RotationTracker(Linear("3 2大招 4E"));
+        var hud = new Hud(3) with { Ult2 = true };
+
+        See(tracker, hud);
+        See(tracker, hud with { Sp = 2 }, [Skill(3)]);
+        Assert.Equal("2大招", Now(tracker));
+
+        RotationState during = See(tracker, Hud.Absent, [Ultimate(2)], TimeSpan.FromSeconds(2));
+
+        Assert.True(during.Stale);
+        Assert.Equal(["2大招"], during.Completed.Select(s => s.Action.ToString()));
+        Assert.Equal("4E", Now(tracker));
+    }
+
+    [Fact]
+    public void KeysKeepTheFightAliveWhileTheHudStaysHidden()
+    {
+        // Back-to-back cut-ins hide the HUD for longer than a fight's idle
+        // timeout. The player is at their busiest, so this must not be read as
+        // the fight being over.
+        var tracker = new RotationTracker(Linear("3 2 4E"));
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(3)]);
+        See(tracker, Hud.Absent, [Skill(2)], TimeSpan.FromSeconds(5));
+        Assert.Equal("4E", Now(tracker));
+
+        See(tracker, Hud.Absent, TimeSpan.FromSeconds(5));
+
+        Assert.Equal("4E", Now(tracker));
+        Assert.Equal(1, tracker.State.Cursor.Round);
+    }
+
+    [Fact]
+    public void AQuietSpellStartsTheNextFightAtTheFirstStep()
+    {
+        var tracker = new RotationTracker(Example);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud with { Sp = 2 }, [Skill(3)]);
+        Assert.Equal("2", Now(tracker));
+
+        See(tracker, Hud.Absent, TimeSpan.FromSeconds(10));
+        See(tracker, hud, TimeSpan.FromSeconds(1));
+
+        Assert.Equal(new RotationCursor(0, 1), tracker.State.Cursor);
+    }
+
+    [Fact]
+    public void AKeyPressedOutsideAFightDoesNotStartOne()
+    {
+        // No HUD for a long while, then 1-4 or E in a menu or on the way
+        // somewhere. Only the HUD coming back says the next fight has started.
         var tracker = new RotationTracker(Linear("3 2"));
         See(tracker, new Hud(3));
         See(tracker, Hud.Absent, TimeSpan.FromSeconds(10));
 
-        RotationState state = See(tracker, new Hud(3), [Skill(3)]);
-
+        RotationState state = See(tracker, Hud.Absent, [Skill(3)], TimeSpan.FromSeconds(1));
         Assert.Equal(new RotationCursor(0, 1), state.Cursor);
         Assert.Empty(state.Completed);
+
+        See(tracker, new Hud(3), [Skill(3)]);
+        Assert.Equal("2", Now(tracker));
     }
 
     [Fact]
-    public void ACastDuringACutInIsNotLost()
+    public void StartingOverMidFightIsPickedUp()
     {
-        var tracker = new RotationTracker(Linear("3 2 4E"));
-        See(tracker, new Hud(3));
-        See(tracker, new Hud(3), [Skill(3)]);
+        // The user's report: off the rotation, then back to the top without
+        // leaving the fight. Stepping forward from the old cursor never catches
+        // up; the tracker has to notice where the inputs fit.
+        var tracker = new RotationTracker(Example);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(3)]);
+        See(tracker, hud, [Skill(2)]);
+        See(tracker, hud, [Chain(4)]);
+        See(tracker, hud, [Chain(1)]);
+        See(tracker, hud, [Skill(1)]);
+        Assert.Equal("2E", Now(tracker));
+
+        // Lost the plot: start over with 3, 2, 4E while 2E is still expected.
+        See(tracker, hud, [Skill(3)]);
+        See(tracker, hud, [Skill(2)]);
+        Assert.Equal("2E", Now(tracker));
+        Assert.False(tracker.State.Resynced);
+
+        RotationState state = See(tracker, hud, [Chain(4)]);
+
+        // The opening happens once, so starting over is the cycle's next round.
+        Assert.True(state.Resynced);
+        Assert.Equal("1E", Now(tracker));
+        Assert.Equal(new RotationCursor(Example.IndexOf("c4"), 2), state.Cursor);
+    }
+
+    [Fact]
+    public void TwoFittingInputsAreNotEnoughToRealign()
+    {
+        // 3 then 2E fits "…1, 2E" -- but two inputs are too little evidence to
+        // throw the cursor across the rotation.
+        var tracker = new RotationTracker(Example);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(3)]);
+        RotationState state = See(tracker, hud, [Chain(2)]);
+
+        Assert.False(state.Resynced);
         Assert.Equal("2", Now(tracker));
+    }
 
-        RotationState during = See(tracker, Hud.Absent, [Skill(2)]);
-        Assert.True(during.Stale);
+    [Fact]
+    public void APlayerWhoIsOnTrackIsNeverMoved()
+    {
+        // Following the rotation exactly produces no realignments at all.
+        var tracker = new RotationTracker(Example);
+        var hud = new Hud(3);
 
-        RotationState after = See(tracker, new Hud(3), []);
+        var states = new List<RotationState>
+        {
+            See(tracker, hud),
+            See(tracker, hud, [Skill(3)]),
+            See(tracker, hud, [Skill(2)]),
+            See(tracker, hud, [Chain(4)]),
+            See(tracker, hud, [Chain(1)]),
+            See(tracker, hud, [Skill(1)]),
+            See(tracker, hud, [Chain(2)]),
+        };
+
+        Assert.DoesNotContain(states, s => s.Resynced);
+        Assert.DoesNotContain(states, s => s.Unexpected.Count > 0);
+    }
+
+    [Fact]
+    public void ABranchIsSuggestedWhileItsConditionHolds()
+    {
+        // After 2E: if 4 leads the chain prompt, take 4E; otherwise press 1.
+        var tracker = new RotationTracker(Branching);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(3)]);
+        See(tracker, hud, [Chain(2)]);
+        Assert.Equal("1", Now(tracker));
+
+        See(tracker, hud with { Lead = 4 });
         Assert.Equal("4E", Now(tracker));
-        Assert.False(after.Stale);
+
+        // The prompt going away changes the suggestion back.
+        See(tracker, hud);
+        Assert.Equal("1", Now(tracker));
+    }
+
+    [Fact]
+    public void TheWayThePlayerActuallyGoesWins()
+    {
+        var tracker = new RotationTracker(Branching);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(3)]);
+        See(tracker, hud, [Chain(2)]);
+        Assert.Equal("1", Now(tracker));
+
+        // 1 was suggested, but 4's chain is what was pressed: that is the branch.
+        RotationState state = See(tracker, hud, [Chain(4)]);
+
+        Assert.Empty(state.Unexpected);
+        Assert.Equal("3大招", Now(tracker));
     }
 
     [Fact]
@@ -428,21 +419,11 @@ public class RotationTrackerTests
 
     private static string Now(RotationTracker tracker) => tracker.State.Current.Step.Action.ToString();
 
-    private RotationState See(RotationTracker tracker, HudSnapshot snapshot, TimeSpan? after = null)
-    {
-        clock += after ?? TimeSpan.FromMilliseconds(50);
-        return tracker.Observe(snapshot, clock);
-    }
-
-    private RotationState See(RotationTracker tracker, HudSnapshot snapshot, IReadOnlyList<CastInput> casts)
-    {
-        clock += TimeSpan.FromMilliseconds(50);
-        return tracker.Observe(snapshot, clock, casts, keyboardAuthoritative: true);
-    }
-
     private static CastInput Skill(int slot) => new(CastKind.Skill, slot, TimeSpan.Zero);
 
     private static CastInput Chain(int slot) => new(CastKind.Chain, slot, TimeSpan.Zero);
+
+    private static CastInput Ultimate(int slot) => new(CastKind.Ultimate, slot, TimeSpan.Zero);
 
     private static void AdvanceTo(RotationTracker tracker, string id)
     {
@@ -452,6 +433,19 @@ public class RotationTrackerTests
             Assert.True(guard < 100, $"never reached {id}");
             tracker.Skip();
         }
+    }
+
+    private RotationState See(RotationTracker tracker, HudSnapshot snapshot, TimeSpan? after = null) =>
+        See(tracker, snapshot, [], after);
+
+    private RotationState See(
+        RotationTracker tracker,
+        HudSnapshot snapshot,
+        IReadOnlyList<CastInput> casts,
+        TimeSpan? after = null)
+    {
+        clock += after ?? TimeSpan.FromMilliseconds(50);
+        return tracker.Observe(snapshot, clock, casts);
     }
 
     private sealed record Hud(int Sp)

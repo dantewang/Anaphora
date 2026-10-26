@@ -803,6 +803,26 @@
 
         <Border Classes="card">
           <StackPanel Spacing="14">
+            <TextBlock Classes="h" Text="KEYBOARD  按键" />
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                <NumericUpDown Value="{Binding Settings.UltimateHoldMs}" Minimum="100" Maximum="2000" Increment="50"
+                               FormatString="0" Width="130" />
+                <TextBlock Classes="muted" Text="毫秒" VerticalAlignment="Center" />
+              </StackPanel>
+              <StackPanel Spacing="2">
+                <TextBlock Text="长按多久算大招" />
+                <TextBlock Classes="dim" TextWrapping="Wrap"
+                           Text="数字键按住超过这个时间就当大招，短按是技能。按几次大招，在 app.log 里看记下的按住时长，再往上调一点。" />
+              </StackPanel>
+            </DockPanel>
+            <TextBlock Classes="dim" TextWrapping="Wrap"
+                       Text="轴只跟 1–4 和 E：画面负责读技能点、冷却和连携提示，但不推进轴。游戏在前台时才读键。" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card">
+          <StackPanel Spacing="14">
             <TextBlock Classes="h" Text="HOTKEYS  快捷键" />
             <DockPanel>
               <TextBox x:Name="HotkeyBox" DockPanel.Dock="Right" Width="150" Classes="mono" IsReadOnly="True"

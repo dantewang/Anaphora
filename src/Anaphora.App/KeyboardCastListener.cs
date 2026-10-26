@@ -43,7 +43,6 @@ internal sealed class KeyboardCastListener : IDisposable
     private readonly bool[] down = new bool[6];
 
     private long target;
-    private volatile bool enabled = true;
     private volatile bool running = true;
     private bool disposed;
 
@@ -67,10 +66,11 @@ internal sealed class KeyboardCastListener : IDisposable
         set => Interlocked.Exchange(ref target, value);
     }
 
-    public bool Enabled
+    /// <summary>How long a number key must be held to count as an ultimate.</summary>
+    public TimeSpan UltimateHold
     {
-        get => enabled;
-        set => enabled = value;
+        get => reader.UltimateHold;
+        set => reader.UltimateHold = value;
     }
 
     public void Dispose()
@@ -92,7 +92,7 @@ internal sealed class KeyboardCastListener : IDisposable
         bool active = false;
         while (running)
         {
-            if (!enabled || !IsForeground(TargetWindow))
+            if (!IsForeground(TargetWindow))
             {
                 if (active)
                 {

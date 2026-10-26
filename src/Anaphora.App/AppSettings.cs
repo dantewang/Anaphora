@@ -18,6 +18,10 @@ internal sealed record AnchorSetting(double X, double Y)
 /// <summary>What the user changed and expects to find again next time.</summary>
 internal sealed record AppSettings
 {
+    public const int MinUltimateHoldMs = 100;
+
+    public const int MaxUltimateHoldMs = 2000;
+
     private static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Anaphora", "settings.json");
 
@@ -48,14 +52,14 @@ internal sealed record AppSettings
     public string? MoveHotkey { get; init; } = "Ctrl+Alt+M";
 
     /// <summary>
-    /// Trust the keyboard for "did this step happen". On by default, because
-    /// the HUD cannot see a skill that costs less than a whole point. The HUD
-    /// is still read for what is possible now and for whose chain E triggered.
+    /// How long a number key must be held before it counts as an ultimate,
+    /// not a skill. Only the player can say what matches the game.
     /// </summary>
-    public bool ReadKeyboard { get; init; } = true;
-
-    /// <summary>How long a number key must be held before it counts as an ultimate, not a skill.</summary>
     public int UltimateHoldMs { get; init; } = 500;
+
+    /// <summary>The hold threshold as the listener wants it, clamped to what is sane.</summary>
+    public static TimeSpan UltimateHold(int milliseconds) =>
+        TimeSpan.FromMilliseconds(Math.Clamp(milliseconds, MinUltimateHoldMs, MaxUltimateHoldMs));
 
     /// <summary>Where the user dragged the overlay to; null means the default place.</summary>
     public AnchorSetting? OverlayAnchor { get; init; }

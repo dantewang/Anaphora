@@ -24,12 +24,12 @@ internal sealed class AnaphoraHost : IDisposable
     private static readonly TimeSpan PlacementInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>
-    /// A key press older than this is not from the fight on screen: a menu, a
-    /// cut-in the game ignored, or the capture just starting. A held ultimate
-    /// crosses its threshold about half a second after the press, so the window
-    /// has to cover that.
+    /// How recent a reading has to be for its chain prompt to name the slot
+    /// behind a press of E. The prompt is read from the frame before the cut-in
+    /// ate it, which is a fraction of a second old; anything older than this is
+    /// from some earlier moment and would name the wrong operator.
     /// </summary>
-    private static readonly TimeSpan KeyInputFreshness = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan PromptFreshness = TimeSpan.FromSeconds(1.5);
 
     /// <summary>
     /// How recent the skill-point reading must be for a "0 whole points" warning
@@ -37,6 +37,9 @@ internal sealed class AnaphoraHost : IDisposable
     /// a cheap skill, and that is the case the HUD misses.
     /// </summary>
     private static readonly TimeSpan SkillPointWarningFreshness = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>How long the overlay says "that was not this step" after a key no step explains.</summary>
+    private static readonly TimeSpan MisfireLinger = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// What --demo shows instead of an unreadable HUD: one skill point short of
@@ -71,6 +74,7 @@ internal sealed class AnaphoraHost : IDisposable
     private long lastReadableTicks;
     private HudSnapshot? lastReadableHud;
     private Pending? pending;
+    private (Observation Seen, TimeSpan At)? misfire;
     private int posted;
     private bool checkedClickThrough;
 
@@ -80,9 +84,7 @@ internal sealed class AnaphoraHost : IDisposable
         this.settings = settings;
         Library = library;
 
-        int ultimateHoldMs = Math.Clamp(settings.UltimateHoldMs, 100, 2000);
-        keyboard = new KeyboardCastListener(clock, TimeSpan.FromMilliseconds(ultimateHoldMs));
-        keyboard.Enabled = KeyboardEnabled;
+        keyboard = new KeyboardCastListener(clock, AppSettings.UltimateHold(settings.UltimateHoldMs));
         keyboard.Cast += OnKeyboardCast;
 
         Profile = ProfileStore.Load(options.ProfilePath);
@@ -113,7 +115,7 @@ internal sealed class AnaphoraHost : IDisposable
 
         Log.Write(
             $"started: profile {Profile.Id}, rotation {rotation.Id}, process {options.ProcessName ?? Profile.Window.ProcessName}"
-            + (KeyboardEnabled ? $", keyboard on (ultimate hold {ultimateHoldMs}ms)" : ", keyboard off"));
+            + $", ultimate hold {keyboard.UltimateHold.TotalMilliseconds:F0}ms");
     }
 
     /// <summary>Settings changed from somewhere -- the tray or the main window -- so the other can follow.</summary>
@@ -127,9 +129,6 @@ internal sealed class AnaphoraHost : IDisposable
     public RotationLibrary Library { get; }
 
     public AppSettings Settings => settings;
-
-    /// <summary>Keys decide which steps happened; the HUD only says what is possible.</summary>
-    public bool KeyboardEnabled => options.Keyboard && settings.ReadKeyboard;
 
     public Rotation ActiveRotation
     {
@@ -166,15 +165,10 @@ internal sealed class AnaphoraHost : IDisposable
         settings.Save();
 
         surface.Model.TrackVisible = settings.TrackVisible;
-        keyboard.Enabled = KeyboardEnabled;
-        if (!KeyboardEnabled)
+        if (previous.UltimateHoldMs != settings.UltimateHoldMs)
         {
-            ClearCasts();
-        }
-
-        if (previous.ReadKeyboard != settings.ReadKeyboard)
-        {
-            Log.Write(KeyboardEnabled ? "keyboard input on" : "keyboard input off; HUD-only tracking");
+            keyboard.UltimateHold = AppSettings.UltimateHold(settings.UltimateHoldMs);
+            Log.Write($"ultimate hold {keyboard.UltimateHold.TotalMilliseconds:F0}ms");
         }
 
         if (previous.ResetHotkey != settings.ResetHotkey || previous.MoveHotkey != settings.MoveHotkey)
@@ -457,13 +451,10 @@ internal sealed class AnaphoraHost : IDisposable
             Volatile.Write(ref lastReadableHud, hud);
         }
 
-        bool keys = KeyboardEnabled;
-        CastInput[] casts = keys ? DrainCasts() : [];
-
         RotationState state;
         lock (trackerGate)
         {
-            state = tracker.Observe(hud, now, casts, keys);
+            state = tracker.Observe(hud, now, DrainCasts());
         }
 
         foreach (Observation surprise in state.Unexpected)
@@ -476,7 +467,21 @@ internal sealed class AnaphoraHost : IDisposable
             Log.Write($"realigned to {state.Cursor}: now {state.Current.Step.Action}");
         }
 
-        Volatile.Write(ref pending, new Pending(hud, state, SinceReadable));
+        // The last unexplained key stays on the overlay for a moment: pressing
+        // the wrong slot leaves the cursor where it is, and a card that simply
+        // does not move looks the same as one that has not noticed.
+        Observation? shown;
+        lock (castGate)
+        {
+            if (!state.Resynced && state.Unexpected.Count > 0)
+            {
+                misfire = (state.Unexpected[^1], now);
+            }
+
+            shown = misfire is { } m && now - m.At <= MisfireLinger ? m.Seen : null;
+        }
+
+        Volatile.Write(ref pending, new Pending(hud, state, SinceReadable, shown));
         if (Interlocked.Exchange(ref posted, 1) == 0)
         {
             Dispatcher.UIThread.Post(Flush, DispatcherPriority.Render);
@@ -489,34 +494,35 @@ internal sealed class AnaphoraHost : IDisposable
         Interlocked.Exchange(ref posted, 0);
         if (Volatile.Read(ref pending) is { } latest)
         {
-            surface.Model.Apply(latest.Hud, latest.Rotation, latest.Age);
+            surface.Model.Apply(latest.Hud, latest.Rotation, latest.Age, latest.Misfire);
         }
     }
 
     /// <summary>
     /// Keyboard thread. The cast is queued for the next captured frame, where
-    /// the tracker can see it and the HUD it happened against together. Only
-    /// casts from a fight that was readable a moment ago get here; a key pressed
-    /// in a menu or after alt-tabbing is dropped.
+    /// the tracker can see it and the HUD it happened against together.
+    ///
+    /// Nothing here is gated on the HUD being readable. A cut-in hides the HUD
+    /// for seconds, and the press that caused it is precisely the one the
+    /// rotation needs; dropping those is what left the cursor sitting still
+    /// through a whole burst. Deciding that a key belongs to no fight at all is
+    /// the tracker's job, where the keys and the readings are seen together.
     /// </summary>
     private void OnKeyboardCast(CastInput cast)
     {
-        if (!KeyboardEnabled || game == 0)
+        if (game == 0)
         {
             return;
         }
 
         TimeSpan sinceReadable = SinceReadable;
-        if (sinceReadable > KeyInputFreshness)
-        {
-            return;
-        }
 
         // E is shared by the team; the leading prompt is what names the chain.
         // Take it from the frame before the cut-in consumes it, rather than
         // from the next frame, where the prompt is already gone.
         if (cast.Kind == CastKind.Chain
             && cast.Slot == 0
+            && sinceReadable <= PromptFreshness
             && Volatile.Read(ref lastReadableHud) is { HudPresent: true } prompt
             && prompt.Prompts.Count > 0
             && prompt.Prompts[0].Slot is int slot)
@@ -568,11 +574,12 @@ internal sealed class AnaphoraHost : IDisposable
     {
         lock (castGate)
         {
+            misfire = null;
             pendingCasts.Clear();
         }
     }
 
-    private sealed record Pending(HudSnapshot Hud, RotationState Rotation, TimeSpan Age);
+    private sealed record Pending(HudSnapshot Hud, RotationState Rotation, TimeSpan Age, Observation? Misfire);
 
     private static nint FindWindow(string processName)
     {

@@ -67,20 +67,31 @@ public readonly record struct KeyTransition(GameKey Key, bool IsDown, TimeSpan A
 public sealed class KeyboardCastReader
 {
     private readonly Dictionary<GameKey, Hold> down = [];
-    private readonly TimeSpan ultimateHold;
+    private long ultimateHoldTicks;
     private bool chainDown;
 
     public KeyboardCastReader(TimeSpan ultimateHold)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(ultimateHold, TimeSpan.Zero);
-        this.ultimateHold = ultimateHold;
+        UltimateHold = ultimateHold;
     }
 
     /// <summary>Raised on the thread that feeds transitions.</summary>
     public event Action<CastInput>? Cast;
 
-    /// <summary>How long a number key must be held to count as an ultimate.</summary>
-    public TimeSpan UltimateHold => ultimateHold;
+    /// <summary>
+    /// How long a number key must be held to count as an ultimate. Settable
+    /// because only the player can say what matches the game's feel, and they
+    /// change it from the settings page while this is running.
+    /// </summary>
+    public TimeSpan UltimateHold
+    {
+        get => TimeSpan.FromTicks(Interlocked.Read(ref ultimateHoldTicks));
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
+            Interlocked.Exchange(ref ultimateHoldTicks, value.Ticks);
+        }
+    }
 
     public void Feed(KeyTransition transition)
     {
@@ -115,7 +126,7 @@ public sealed class KeyboardCastReader
 
         TimeSpan held = transition.At - hold.At;
         Cast?.Invoke(new CastInput(
-            held >= ultimateHold ? CastKind.Ultimate : CastKind.Skill,
+            held >= UltimateHold ? CastKind.Ultimate : CastKind.Skill,
             (int)transition.Key,
             transition.At,
             held));
@@ -132,16 +143,17 @@ public sealed class KeyboardCastReader
             return;
         }
 
+        TimeSpan threshold = UltimateHold;
         foreach (GameKey key in down.Keys.ToArray())
         {
             Hold hold = down[key];
-            if (!hold.Fired && now - hold.At >= ultimateHold)
+            if (!hold.Fired && now - hold.At >= threshold)
             {
                 down[key] = hold with { Fired = true };
                 Cast?.Invoke(new CastInput(
                     CastKind.Ultimate,
                     (int)key,
-                    hold.At + ultimateHold,
+                    hold.At + threshold,
                     now - hold.At));
             }
         }

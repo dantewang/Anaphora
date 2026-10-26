@@ -302,6 +302,15 @@
           <local:OutlinedText Classes="sub" Text="{Binding NowAction.Sub}" />
         </StackPanel>
 
+        <!-- A key no step explains leaves the card exactly where it was, which
+             looks the same as the overlay missing the press. Say which it is,
+             for a couple of seconds, then get out of the way. -->
+        <Border IsVisible="{Binding HasMisfire}" HorizontalAlignment="Center" Padding="8,4"
+                Background="#CC0A0B0B" BorderBrush="{StaticResource Warn}" BorderThickness="2,0,0,0">
+          <TextBlock Text="{Binding Misfire}" FontSize="10.5" FontWeight="SemiBold"
+                     Foreground="{StaticResource Warn}" />
+        </Border>
+
         <!-- the current segment, cursor on the step to press. How long it is, is
              the user's editing decision, so nothing here truncates it; a segment
              too long to read is a segment that wants splitting. -->
