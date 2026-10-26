@@ -5,8 +5,9 @@ using System.Text.Json.Serialization;
 namespace Anaphora.Core;
 
 /// <summary>
-/// What kind of input a rotation step asks for. Only inputs the HUD can confirm
-/// are steps; heavy attacks and the like are <see cref="SoftCue"/>s.
+/// What kind of input a rotation step asks for. Only inputs the game can
+/// confirm -- from the HUD, or from the key press itself -- are steps; heavy
+/// attacks and the like are <see cref="SoftCue"/>s.
 /// </summary>
 public enum ActionKind
 {

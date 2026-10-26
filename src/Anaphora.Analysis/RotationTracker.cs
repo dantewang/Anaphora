@@ -11,22 +11,36 @@ public enum ObservedKind
     /// <summary>A whole skill point went. Which slot spent it is not visible.</summary>
     SkillSpent,
 
-    /// <summary>A chain went from ready to cooling down.</summary>
+    /// <summary>A number key was pressed; unlike <see cref="SkillSpent"/>, this names its slot.</summary>
+    SkillUsed,
+
+    /// <summary>A chain went from ready to cooling down, or E was pressed.</summary>
     ChainUsed,
 
-    /// <summary>An ultimate went from castable to charging.</summary>
+    /// <summary>An ultimate went from castable to charging, or its number key was held.</summary>
     UltimateUsed,
 }
 
-/// <param name="Slot">1-4, or 0 when the HUD does not say whose it was.</param>
+/// <param name="Slot">1-4, or 0 when the evidence does not say whose it was.</param>
 public readonly record struct Observation(ObservedKind Kind, int Slot)
 {
-    public bool NamesItsSlot => Kind != ObservedKind.SkillSpent;
+    /// <summary>True when this observation can only match one particular slot.</summary>
+    public bool NamesItsSlot => Kind is ObservedKind.SkillUsed or ObservedKind.UltimateUsed
+        || (Kind == ObservedKind.ChainUsed && Slot is >= 1 and <= 4);
+
+    /// <summary>
+    /// True when a slot-specific input may be matched a few steps ahead. An
+    /// anonymous skill point must not jump past a step it cannot account for;
+    /// a key press may, because it says what it was.
+    /// </summary>
+    public bool MayLookAhead => Kind is ObservedKind.SkillUsed or ObservedKind.ChainUsed or ObservedKind.UltimateUsed;
 
     public override string ToString() => Kind switch
     {
         ObservedKind.SkillSpent => "技能点 -1",
-        ObservedKind.ChainUsed => $"{Slot}E 已用",
+        ObservedKind.SkillUsed => $"{Slot} 技能（按键）",
+        ObservedKind.ChainUsed when Slot is >= 1 and <= 4 => $"{Slot}E 已用",
+        ObservedKind.ChainUsed => "E 连携（槽位未知）",
         ObservedKind.UltimateUsed => $"{Slot}大招 已用",
         _ => Kind.ToString(),
     };
@@ -66,13 +80,19 @@ public sealed record RotationState
 
     public int SegmentLength { get; init; }
 
-    /// <summary>The HUD is not readable; the cursor is frozen where it was.</summary>
+    /// <summary>
+    /// The HUD is not readable. The cursor still follows keyboard casts, if any;
+    /// the readings behind its conditions are the last readable ones.
+    /// </summary>
     public bool Stale { get; init; }
 
     /// <summary>Steps this update recognised as done, oldest first.</summary>
     public IReadOnlyList<RotationStep> Completed { get; init; } = [];
 
-    /// <summary>Things that happened on screen that no nearby step explains -- the player is off the rotation.</summary>
+    /// <summary>
+    /// Inputs that no nearby step explains -- the player is off the rotation.
+    /// They may come from the HUD or from the keyboard.
+    /// </summary>
     public IReadOnlyList<Observation> Unexpected { get; init; } = [];
 
     /// <summary>
@@ -86,9 +106,9 @@ public sealed record RotationTrackerOptions
 {
     /// <summary>
     /// How far ahead a slot-specific observation may reach to find its step.
-    /// A chain or ultimate names its slot, so matching it a few steps on is safe
-    /// and recovers from a missed skill; an anonymous skill point is never
-    /// allowed to jump past a step it cannot account for.
+    /// A chain, an ultimate or a skill key names its slot, so matching it a few
+    /// steps on is safe and recovers from a missed skill; an anonymous skill
+    /// point is never allowed to jump past a step it cannot account for.
     /// </summary>
     public int LookAhead { get; init; } = 3;
 
@@ -110,23 +130,33 @@ public sealed record RotationTrackerOptions
 }
 
 /// <summary>
-/// Follows a rotation by watching the HUD, never the keyboard.
+/// Follows a rotation from the HUD, and -- when the host has a keyboard
+/// listener -- from the keys the player actually pressed.
 ///
-/// Each readable snapshot is compared with the previous readable one. A skill
-/// point disappearing, a chain starting its cooldown and an ultimate going dark
-/// are the observable traces of the player's inputs, and each is matched to the
-/// step it completes. Soft cues -- heavy attacks, the Nth attack after a skill --
-/// leave no trace and are never waited for; they ride along with their step.
+/// With the HUD alone, each readable snapshot is compared with the previous
+/// readable one. A skill point disappearing, a chain starting its cooldown and
+/// an ultimate going dark are the observable traces of the player's inputs, and
+/// each is matched to the step it completes. Soft cues -- heavy attacks, the
+/// Nth attack after a skill -- leave no trace and are never waited for; they
+/// ride along with their step.
+///
+/// With the keyboard authoritative, those pixel traces are ignored for step
+/// completion and key casts are used instead. That fixes both halves of the
+/// old problem: a short skill does not need to move a whole segment to be seen,
+/// and the input says which slot it was. The HUD is still read for what is
+/// possible at this moment (skill points, cooldowns, ultimate rings, prompts)
+/// and for naming the slot of an E press. The conflict rule is deliberate: if
+/// the HUD shows a cast no key produced, the cursor does not move.
+///
+/// Known blind spot: with the keyboard off, a skill that costs less than a
+/// whole segment does not change the whole-segment count, so it goes unseen
+/// until a later chain or ultimate pulls the cursor past it.
 ///
 /// The rotation is a state machine. After a step, the cursor goes the way the
 /// branch conditions point, and keeps re-deciding while the player has not moved
 /// on, since the HUD may change its mind (a chain prompt appearing, say). What
 /// the player actually does wins: an input matching another way out of the last
 /// step is taken as that way.
-///
-/// Known blind spot: a skill that costs less than a whole segment does not
-/// change the whole-segment count, so it goes unseen until a later chain or
-/// ultimate pulls the cursor past it.
 ///
 /// When the player leaves the rotation and starts over mid-fight, stepping
 /// forward from the old cursor can never catch up. So whenever something
@@ -174,69 +204,151 @@ public sealed class RotationTracker
     private static RotationCursor Start => new(0, 1);
 
     /// <param name="timestamp">Any monotonic clock; only differences are used.</param>
-    public RotationState Observe(HudSnapshot snapshot, TimeSpan timestamp)
+    public RotationState Observe(HudSnapshot snapshot, TimeSpan timestamp) =>
+        Observe(snapshot, timestamp, null, keyboardAuthoritative: false);
+
+    /// <summary>
+    /// Advances the rotation from one frame and, when the keyboard is
+    /// authoritative, from the key casts seen since the previous frame. Key
+    /// casts are still followed while the HUD is hidden by a cut-in, so the
+    /// press that caused the cut-in is not swallowed.
+    /// </summary>
+    /// <param name="casts">Casts reported by the keyboard, oldest first.</param>
+    /// <param name="keyboardAuthoritative">
+    /// True when the keys, not the HUD's deltas, decide which steps happened.
+    /// Image-only traces are then ignored entirely.
+    /// </param>
+    public RotationState Observe(
+        HudSnapshot snapshot,
+        TimeSpan timestamp,
+        IReadOnlyList<CastInput>? casts,
+        bool keyboardAuthoritative)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        if (!snapshot.HudPresent)
-        {
-            State = Describe(baseline, stale: true, [], []);
-            return State;
-        }
-
+        bool restarted = false;
         if (everPresent && timestamp - lastPresent >= options.ResetAfterAbsence)
         {
+            if (!snapshot.HudPresent)
+            {
+                // A key pressed in a menu must not start the next fight.
+                State = Describe(baseline, stale: true, [], []);
+                return State;
+            }
+
             Restart();
+            restarted = true;
+        }
+
+        var completed = new List<RotationStep>();
+        var unexpected = new List<Observation>();
+        bool resynced;
+
+        if (!snapshot.HudPresent)
+        {
+            // A chain or ultimate cut-in hides the HUD, not the keyboard.
+            resynced = baseline is not null
+                && Process(Observations(casts, baseline), timestamp, baseline, completed, unexpected);
+
+            State = Describe(baseline, stale: true, completed, unexpected) with { Resynced = resynced };
+            return State;
         }
 
         everPresent = true;
         lastPresent = timestamp;
 
-        var completed = new List<RotationStep>();
-        var unexpected = new List<Observation>();
-        bool resynced = false;
+        IReadOnlyList<Observation> pending = keyboardAuthoritative
+            ? Observations(restarted ? null : casts, snapshot)
+            : baseline is not null ? Diff(baseline, snapshot) : [];
 
-        if (baseline is not null)
-        {
-            List<Observation> pending = Diff(baseline, snapshot);
-
-            foreach (Observation seen in pending)
-            {
-                history.Add((seen, timestamp));
-            }
-
-            history.RemoveAll(entry => timestamp - entry.At > options.ResyncWindow);
-
-            // Match whatever can be matched, in whichever order the steps want
-            // them: two things seen in the same frame need not have happened in
-            // the order they were diffed.
-            bool progress = true;
-            while (progress && pending.Count > 0)
-            {
-                progress = false;
-                for (int i = 0; i < pending.Count; i++)
-                {
-                    if (TryComplete(pending[i], snapshot, completed))
-                    {
-                        pending.RemoveAt(i);
-                        progress = true;
-                        break;
-                    }
-                }
-            }
-
-            unexpected.AddRange(pending);
-
-            if (unexpected.Count > 0)
-            {
-                resynced = TryResync();
-            }
-        }
+        resynced = Process(pending, timestamp, snapshot, completed, unexpected);
 
         Redecide(snapshot);
         baseline = snapshot;
         State = Describe(snapshot, stale: false, completed, unexpected) with { Resynced = resynced };
         return State;
+    }
+
+    /// <summary>Matches observations to steps, remembers them, and realigns if none fit.</summary>
+    private bool Process(
+        IReadOnlyList<Observation> pending,
+        TimeSpan timestamp,
+        HudSnapshot snapshot,
+        List<RotationStep> completed,
+        List<Observation> unexpected)
+    {
+        if (pending.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (Observation seen in pending)
+        {
+            history.Add((seen, timestamp));
+        }
+
+        history.RemoveAll(entry => timestamp - entry.At > options.ResyncWindow);
+
+        // Match whatever can be matched, in whichever order the steps want
+        // them: two things seen in the same frame need not have happened in
+        // the order they were diffed.
+        var remaining = new List<Observation>(pending);
+        bool progress = true;
+        while (progress && remaining.Count > 0)
+        {
+            progress = false;
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                if (TryComplete(remaining[i], snapshot, completed))
+                {
+                    remaining.RemoveAt(i);
+                    progress = true;
+                    break;
+                }
+            }
+        }
+
+        unexpected.AddRange(remaining);
+        return remaining.Count > 0 && TryResync();
+    }
+
+    /// <summary>
+    /// Keyboard casts as tracker observations. A chain's slot comes from E's
+    /// target -- the leading prompt -- when the key itself cannot name it.
+    /// </summary>
+    private static IReadOnlyList<Observation> Observations(IReadOnlyList<CastInput>? casts, HudSnapshot snapshot)
+    {
+        if (casts is not { Count: > 0 })
+        {
+            return [];
+        }
+
+        var seen = new List<Observation>(casts.Count);
+        foreach (CastInput cast in casts)
+        {
+            seen.Add(cast.Kind switch
+            {
+                CastKind.Skill => new Observation(ObservedKind.SkillUsed, cast.Slot),
+                CastKind.Chain => new Observation(ObservedKind.ChainUsed, ChainSlot(cast, snapshot)),
+                CastKind.Ultimate => new Observation(ObservedKind.UltimateUsed, cast.Slot),
+                _ => throw new ArgumentOutOfRangeException(nameof(casts), cast.Kind, "unknown cast kind"),
+            });
+        }
+
+        return seen;
+    }
+
+    private static int ChainSlot(CastInput cast, HudSnapshot snapshot)
+    {
+        if (cast.Slot is >= RotationAction.MinSlot and <= RotationAction.MaxSlot)
+        {
+            return cast.Slot;
+        }
+
+        // E triggers whatever leads the prompt. This is the one place the
+        // keyboard needs the picture; if that portrait is not registered, the
+        // slot stays 0 and the tracker takes the nearest chain step.
+        return snapshot.Prompts.Count > 0 && snapshot.Prompts[0].Slot is int slot ? slot : 0;
     }
 
     /// <summary>Back to the first step, as at the start of a fight.</summary>
@@ -310,7 +422,7 @@ public sealed class RotationTracker
             }
         }
 
-        if (!observation.NamesItsSlot)
+        if (!observation.MayLookAhead)
         {
             return false;
         }
@@ -478,7 +590,8 @@ public sealed class RotationTracker
     private static bool Explains(RotationAction action, Observation observation) => (action.Kind, observation.Kind) switch
     {
         (ActionKind.Skill, ObservedKind.SkillSpent) => true,
-        (ActionKind.Chain, ObservedKind.ChainUsed) => action.Slot == observation.Slot,
+        (ActionKind.Skill, ObservedKind.SkillUsed) => action.Slot == observation.Slot,
+        (ActionKind.Chain, ObservedKind.ChainUsed) => observation.Slot == 0 || action.Slot == observation.Slot,
         (ActionKind.Ultimate, ObservedKind.UltimateUsed) => action.Slot == observation.Slot,
         _ => false,
     };

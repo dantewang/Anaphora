@@ -15,6 +15,8 @@ namespace Anaphora.App;
 ///   --demo               stand in canned readings whenever the HUD is unreadable, so the
 ///                        overlay draws its live state on a machine with no game on it.
 ///                        For looking at the overlay, never for judging a reading.
+///   --no-keyboard        do not read 1-4/E; track only from the HUD. For typing in the
+///                        captured window while developing, and as a panic switch.
 /// </summary>
 internal sealed record AppOptions
 {
@@ -34,6 +36,9 @@ internal sealed record AppOptions
     /// <summary>Draw the overlay from canned readings when the real HUD is not there.</summary>
     public bool Demo { get; init; }
 
+    /// <summary>False only for --no-keyboard: fall back to HUD-only tracking.</summary>
+    public bool Keyboard { get; init; } = true;
+
     public static AppOptions Parse(string[] args)
     {
         var options = new AppOptions();
@@ -48,6 +53,7 @@ internal sealed record AppOptions
                 "--process" => options with { ProcessName = Next() },
                 "--any-foreground" => options with { RequireForeground = false },
                 "--demo" => options with { Demo = true },
+                "--no-keyboard" => options with { Keyboard = false },
                 "--rate" => options with
                 {
                     Rate = double.TryParse(Next(), NumberStyles.Float, CultureInfo.InvariantCulture, out double rate) ? rate : options.Rate,

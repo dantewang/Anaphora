@@ -14,3 +14,11 @@ WM_HOTKEY
 WM_QUIT
 WM_APP
 VIRTUAL_KEY
+
+// Keyboard input for the rotation: polling the five keys the rotation uses,
+// but only while the game's window is in front. Not a hook -- GetAsyncKeyState
+// is a plain query, the same one games use for their own input.
+GetAsyncKeyState
+GetForegroundWindow
+GetAncestor
+GET_ANCESTOR_FLAGS

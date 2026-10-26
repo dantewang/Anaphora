@@ -278,6 +278,119 @@ public class RotationTrackerTests
     }
 
     [Fact]
+    public void AKeyPressCompletesASkillWithNoHudChange()
+    {
+        // The whole reason for listening: a skill that spends less than a whole
+        // segment moves nothing on the skill-point bar.
+        var tracker = new RotationTracker(Example);
+        See(tracker, new Hud(3));
+
+        RotationState state = See(tracker, new Hud(3), [Skill(3)]);
+
+        Assert.Equal("2", Now(tracker));
+        Assert.Equal(["3"], state.Completed.Select(s => s.Action.ToString()));
+    }
+
+    [Fact]
+    public void AHudTraceWithoutAKeyDoesNotMoveTheCursor()
+    {
+        // Key wins: the skill point went on screen, but no key was pressed, so
+        // the step is not taken to have happened.
+        var tracker = new RotationTracker(Example);
+        See(tracker, new Hud(3));
+
+        RotationState state = See(tracker, new Hud(2), []);
+
+        Assert.Equal("3", Now(tracker));
+        Assert.Empty(state.Completed);
+        Assert.Empty(state.Unexpected);
+    }
+
+    [Fact]
+    public void AKeyNamesItsSlotAndCannotBeMistakenForAnother()
+    {
+        var tracker = new RotationTracker(Linear("3 2"));
+        See(tracker, new Hud(3));
+
+        RotationState state = See(tracker, new Hud(3), [Skill(1)]);
+
+        Assert.Equal("3", Now(tracker));
+        Assert.Equal([new Observation(ObservedKind.SkillUsed, 1)], state.Unexpected);
+    }
+
+    [Fact]
+    public void ASlotSpecificKeyRecoversAMissedEarlierSkill()
+    {
+        // Same recovery the HUD path has for a chain, now for a skill: the key
+        // says 2, and 2 is one step on, so 3 is taken as already done.
+        var tracker = new RotationTracker(Linear("3 2 4E"));
+        See(tracker, new Hud(3));
+
+        RotationState state = See(tracker, new Hud(3), [Skill(2)]);
+
+        Assert.Equal("4E", Now(tracker));
+        Assert.Equal(["3", "2"], state.Completed.Select(s => s.Action.ToString()));
+    }
+
+    [Fact]
+    public void AnUnknownChainTakesTheNearestChainStep()
+    {
+        var tracker = new RotationTracker(Linear("3 2 4E"));
+        See(tracker, new Hud(3));
+        See(tracker, new Hud(3), [Skill(3)]);
+        See(tracker, new Hud(3), [Skill(2)]);
+        Assert.Equal("4E", Now(tracker));
+
+        RotationState state = See(tracker, new Hud(3), [Chain(0)]);
+
+        Assert.Equal("3", Now(tracker));
+        Assert.Equal(["4E"], state.Completed.Select(s => s.Action.ToString()));
+    }
+
+    [Fact]
+    public void EIsNamedByTheLeadingPrompt()
+    {
+        // E alone cannot say whose chain it was. The prompt does: 2 leads, so
+        // this is 2E even if 1E was the nearest chain step.
+        var tracker = new RotationTracker(Linear("1E 2E"));
+        var hud = new Hud(3) with { Lead = 2 };
+        See(tracker, hud);
+
+        RotationState state = See(tracker, hud, [Chain(0)]);
+
+        Assert.Equal(["1E", "2E"], state.Completed.Select(s => s.Action.ToString()));
+    }
+
+    [Fact]
+    public void AKeyFromTheOldFightDoesNotStartTheNewOne()
+    {
+        var tracker = new RotationTracker(Linear("3 2"));
+        See(tracker, new Hud(3));
+        See(tracker, Hud.Absent, TimeSpan.FromSeconds(10));
+
+        RotationState state = See(tracker, new Hud(3), [Skill(3)]);
+
+        Assert.Equal(new RotationCursor(0, 1), state.Cursor);
+        Assert.Empty(state.Completed);
+    }
+
+    [Fact]
+    public void ACastDuringACutInIsNotLost()
+    {
+        var tracker = new RotationTracker(Linear("3 2 4E"));
+        See(tracker, new Hud(3));
+        See(tracker, new Hud(3), [Skill(3)]);
+        Assert.Equal("2", Now(tracker));
+
+        RotationState during = See(tracker, Hud.Absent, [Skill(2)]);
+        Assert.True(during.Stale);
+
+        RotationState after = See(tracker, new Hud(3), []);
+        Assert.Equal("4E", Now(tracker));
+        Assert.False(after.Stale);
+    }
+
+    [Fact]
     public void SkipMovesPastAStepByHand()
     {
         var tracker = new RotationTracker(Example);
@@ -320,6 +433,16 @@ public class RotationTrackerTests
         clock += after ?? TimeSpan.FromMilliseconds(50);
         return tracker.Observe(snapshot, clock);
     }
+
+    private RotationState See(RotationTracker tracker, HudSnapshot snapshot, IReadOnlyList<CastInput> casts)
+    {
+        clock += TimeSpan.FromMilliseconds(50);
+        return tracker.Observe(snapshot, clock, casts, keyboardAuthoritative: true);
+    }
+
+    private static CastInput Skill(int slot) => new(CastKind.Skill, slot, TimeSpan.Zero);
+
+    private static CastInput Chain(int slot) => new(CastKind.Chain, slot, TimeSpan.Zero);
 
     private static void AdvanceTo(RotationTracker tracker, string id)
     {

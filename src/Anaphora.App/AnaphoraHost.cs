@@ -24,6 +24,21 @@ internal sealed class AnaphoraHost : IDisposable
     private static readonly TimeSpan PlacementInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>
+    /// A key press older than this is not from the fight on screen: a menu, a
+    /// cut-in the game ignored, or the capture just starting. A held ultimate
+    /// crosses its threshold about half a second after the press, so the window
+    /// has to cover that.
+    /// </summary>
+    private static readonly TimeSpan KeyInputFreshness = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
+    /// How recent the skill-point reading must be for a "0 whole points" warning
+    /// to be worth logging. It never vetoes the key: a partial segment can cast
+    /// a cheap skill, and that is the case the HUD misses.
+    /// </summary>
+    private static readonly TimeSpan SkillPointWarningFreshness = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
     /// What --demo shows instead of an unreadable HUD: one skill point short of
     /// three, slot 2's chain ready and its ultimate up, and E leading on 1 then
     /// 2. Enough for every part of the overlay to have something to draw.
@@ -43,6 +58,9 @@ internal sealed class AnaphoraHost : IDisposable
     private readonly DispatcherTimer discovery;
     private readonly DispatcherTimer placement;
     private readonly Lock trackerGate = new();
+    private readonly Lock castGate = new();
+    private readonly Queue<CastInput> pendingCasts = new();
+    private readonly KeyboardCastListener keyboard;
 
     private RotationTracker tracker;
     private GlobalHotkey? resetHotkey;
@@ -51,6 +69,7 @@ internal sealed class AnaphoraHost : IDisposable
     private HudCapture? capture;
     private nint game;
     private long lastReadableTicks;
+    private HudSnapshot? lastReadableHud;
     private Pending? pending;
     private int posted;
     private bool checkedClickThrough;
@@ -60,6 +79,11 @@ internal sealed class AnaphoraHost : IDisposable
         this.options = options;
         this.settings = settings;
         Library = library;
+
+        int ultimateHoldMs = Math.Clamp(settings.UltimateHoldMs, 100, 2000);
+        keyboard = new KeyboardCastListener(clock, TimeSpan.FromMilliseconds(ultimateHoldMs));
+        keyboard.Enabled = KeyboardEnabled;
+        keyboard.Cast += OnKeyboardCast;
 
         Profile = ProfileStore.Load(options.ProfilePath);
         IReadOnlyList<ProfileProblem> problems = ProfileValidator.Validate(Profile);
@@ -87,7 +111,9 @@ internal sealed class AnaphoraHost : IDisposable
         placement = new DispatcherTimer(PlacementInterval, DispatcherPriority.Render, (_, _) => Place());
         RegisterHotkey();
 
-        Log.Write($"started: profile {Profile.Id}, rotation {rotation.Id}, process {options.ProcessName ?? Profile.Window.ProcessName}");
+        Log.Write(
+            $"started: profile {Profile.Id}, rotation {rotation.Id}, process {options.ProcessName ?? Profile.Window.ProcessName}"
+            + (KeyboardEnabled ? $", keyboard on (ultimate hold {ultimateHoldMs}ms)" : ", keyboard off"));
     }
 
     /// <summary>Settings changed from somewhere -- the tray or the main window -- so the other can follow.</summary>
@@ -101,6 +127,9 @@ internal sealed class AnaphoraHost : IDisposable
     public RotationLibrary Library { get; }
 
     public AppSettings Settings => settings;
+
+    /// <summary>Keys decide which steps happened; the HUD only says what is possible.</summary>
+    public bool KeyboardEnabled => options.Keyboard && settings.ReadKeyboard;
 
     public Rotation ActiveRotation
     {
@@ -137,6 +166,17 @@ internal sealed class AnaphoraHost : IDisposable
         settings.Save();
 
         surface.Model.TrackVisible = settings.TrackVisible;
+        keyboard.Enabled = KeyboardEnabled;
+        if (!KeyboardEnabled)
+        {
+            ClearCasts();
+        }
+
+        if (previous.ReadKeyboard != settings.ReadKeyboard)
+        {
+            Log.Write(KeyboardEnabled ? "keyboard input on" : "keyboard input off; HUD-only tracking");
+        }
+
         if (previous.ResetHotkey != settings.ResetHotkey || previous.MoveHotkey != settings.MoveHotkey)
         {
             RegisterHotkey();
@@ -162,6 +202,7 @@ internal sealed class AnaphoraHost : IDisposable
             state = tracker.State;
         }
 
+        ClearCasts();
         surface.Model.Apply(HudSnapshot.Absent, state, SinceReadable);
         Log.Write($"following rotation {rotation.Id}");
 
@@ -183,6 +224,7 @@ internal sealed class AnaphoraHost : IDisposable
             state = tracker.State;
         }
 
+        ClearCasts();
         surface.Model.Apply(HudSnapshot.Absent, state, TimeSpan.Zero);
     }
 
@@ -298,6 +340,7 @@ internal sealed class AnaphoraHost : IDisposable
     {
         discovery.Stop();
         placement.Stop();
+        keyboard.Dispose();
         resetHotkey?.Dispose();
         moveHotkey?.Dispose();
         StopCapture("shutting down");
@@ -329,6 +372,7 @@ internal sealed class AnaphoraHost : IDisposable
 
             capture = started;
             game = window;
+            keyboard.TargetWindow = window;
             // Counts as readable for now, so a fresh capture is visible for a
             // moment before a missing HUD can hide it.
             Interlocked.Exchange(ref lastReadableTicks, clock.Elapsed.Ticks);
@@ -353,6 +397,8 @@ internal sealed class AnaphoraHost : IDisposable
         capture.Dispose();
         capture = null;
         game = 0;
+        keyboard.TargetWindow = 0;
+        ClearCasts();
         surface.Place(null);
         surface.Model.ShowWaiting("等待游戏窗口");
     }
@@ -408,12 +454,16 @@ internal sealed class AnaphoraHost : IDisposable
         if (hud.HudPresent)
         {
             Interlocked.Exchange(ref lastReadableTicks, now.Ticks);
+            Volatile.Write(ref lastReadableHud, hud);
         }
+
+        bool keys = KeyboardEnabled;
+        CastInput[] casts = keys ? DrainCasts() : [];
 
         RotationState state;
         lock (trackerGate)
         {
-            state = tracker.Observe(hud, now);
+            state = tracker.Observe(hud, now, casts, keys);
         }
 
         foreach (Observation surprise in state.Unexpected)
@@ -440,6 +490,85 @@ internal sealed class AnaphoraHost : IDisposable
         if (Volatile.Read(ref pending) is { } latest)
         {
             surface.Model.Apply(latest.Hud, latest.Rotation, latest.Age);
+        }
+    }
+
+    /// <summary>
+    /// Keyboard thread. The cast is queued for the next captured frame, where
+    /// the tracker can see it and the HUD it happened against together. Only
+    /// casts from a fight that was readable a moment ago get here; a key pressed
+    /// in a menu or after alt-tabbing is dropped.
+    /// </summary>
+    private void OnKeyboardCast(CastInput cast)
+    {
+        if (!KeyboardEnabled || game == 0)
+        {
+            return;
+        }
+
+        TimeSpan sinceReadable = SinceReadable;
+        if (sinceReadable > KeyInputFreshness)
+        {
+            return;
+        }
+
+        // E is shared by the team; the leading prompt is what names the chain.
+        // Take it from the frame before the cut-in consumes it, rather than
+        // from the next frame, where the prompt is already gone.
+        if (cast.Kind == CastKind.Chain
+            && cast.Slot == 0
+            && Volatile.Read(ref lastReadableHud) is { HudPresent: true } prompt
+            && prompt.Prompts.Count > 0
+            && prompt.Prompts[0].Slot is int slot)
+        {
+            cast = cast with { Slot = slot };
+        }
+
+        // Do not veto a key on the whole-segment count. A skill that costs
+        // less than a segment is exactly the case the HUD cannot see, and the
+        // count can read 0 while the current segment is partly full. Log the
+        // disagreement and let the key win.
+        if (cast.Kind == CastKind.Skill
+            && sinceReadable <= SkillPointWarningFreshness
+            && Volatile.Read(ref lastReadableHud) is { HudPresent: true } hud
+            && hud.SkillPoints <= 0)
+        {
+            Log.Write($"keyboard: {cast} with 0 whole skill points on the HUD; taking the key");
+        }
+
+        lock (castGate)
+        {
+            if (pendingCasts.Count >= 64)
+            {
+                pendingCasts.Dequeue();
+            }
+
+            pendingCasts.Enqueue(cast);
+        }
+
+        Log.Write($"keyboard: {cast}");
+    }
+
+    private CastInput[] DrainCasts()
+    {
+        lock (castGate)
+        {
+            if (pendingCasts.Count == 0)
+            {
+                return [];
+            }
+
+            CastInput[] casts = [.. pendingCasts];
+            pendingCasts.Clear();
+            return casts;
+        }
+    }
+
+    private void ClearCasts()
+    {
+        lock (castGate)
+        {
+            pendingCasts.Clear();
         }
     }
 

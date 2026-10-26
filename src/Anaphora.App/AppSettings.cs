@@ -47,6 +47,16 @@ internal sealed record AppSettings
     /// </summary>
     public string? MoveHotkey { get; init; } = "Ctrl+Alt+M";
 
+    /// <summary>
+    /// Trust the keyboard for "did this step happen". On by default, because
+    /// the HUD cannot see a skill that costs less than a whole point. The HUD
+    /// is still read for what is possible now and for whose chain E triggered.
+    /// </summary>
+    public bool ReadKeyboard { get; init; } = true;
+
+    /// <summary>How long a number key must be held before it counts as an ultimate, not a skill.</summary>
+    public int UltimateHoldMs { get; init; } = 500;
+
     /// <summary>Where the user dragged the overlay to; null means the default place.</summary>
     public AnchorSetting? OverlayAnchor { get; init; }
 
@@ -88,8 +98,7 @@ internal sealed record AppSettings
 /// </summary>
 internal static class Log
 {
-    private static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Anaphora", "app.log");
+    private static readonly string FilePath = ChoosePath();
 
     private static readonly Lock Gate = new();
 
@@ -104,9 +113,32 @@ internal static class Log
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
                 File.AppendAllText(FilePath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}  {message}{Environment.NewLine}");
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
+                // A log that cannot be written must not take the app down with it.
             }
+        }
+    }
+
+    /// <summary>
+    /// The usual place under LocalAppData. If that directory is not writable --
+    /// a locked-down account, a broken ACL, or a sandbox -- fall back to temp
+    /// rather than throwing on the first startup message.
+    /// </summary>
+    private static string ChoosePath()
+    {
+        string preferred = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Anaphora", "app.log");
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(preferred)!);
+            using FileStream _ = new(preferred, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            return preferred;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Path.Combine(Path.GetTempPath(), "Anaphora", "app.log");
         }
     }
 }
