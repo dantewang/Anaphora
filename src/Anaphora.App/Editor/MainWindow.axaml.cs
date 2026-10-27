@@ -179,6 +179,22 @@ internal sealed partial class MainWindow : Window, IFileAccess
     }
 }
 
+/// <summary>
+/// The same idea for an enum, by name: a group of radio buttons each carrying
+/// one member's name reads and writes a single enum-valued property.
+/// </summary>
+internal sealed class EnumEqualsConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is not null && string.Equals(value.ToString(), parameter?.ToString(), StringComparison.Ordinal);
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true && parameter is not null
+        && Enum.TryParse(Nullable.GetUnderlyingType(targetType) ?? targetType, parameter.ToString(), out object? member)
+            ? member
+            : BindingOperations.DoNothing;
+}
+
 /// <summary>Checks an int against the converter parameter; a checked radio button writes the parameter back.</summary>
 internal sealed class IntEqualsConverter : IValueConverter
 {

@@ -3,33 +3,118 @@
              x:Class="Anaphora.App.App"
              RequestedThemeVariant="Dark">
 
-  <!-- The game's palette, shared by the main window. The overlay keeps its own
-       copy so it can be swapped out without touching this. -->
+  <!--
+    The game's palette, shared by the main window. Two variants: the dark one is
+    the game's own, the light one is for working on a rotation away from it. The
+    overlay keeps its own copy and is pinned to dark, because it lies on top of
+    the game and the game's HUD is dark.
+
+    ThemeDictionaries are only reachable through DynamicResource (StaticResource
+    throws at runtime), so every brush below is referenced that way. The fonts
+    and corner radii after them are variant-free and stay StaticResource.
+  -->
   <Application.Resources>
-    <SolidColorBrush x:Key="Ground" Color="#0A0B0B" />
-    <SolidColorBrush x:Key="Panel" Color="#121414" />
-    <SolidColorBrush x:Key="Card" Color="#181B1B" />
-    <SolidColorBrush x:Key="Line" Color="#34383A" />
-    <SolidColorBrush x:Key="LineSoft" Color="#232627" />
-    <SolidColorBrush x:Key="Text" Color="#ECEBE6" />
-    <SolidColorBrush x:Key="Muted" Color="#8A8E8F" />
-    <SolidColorBrush x:Key="Dim" Color="#5E6263" />
-    <SolidColorBrush x:Key="Amber" Color="#F0B429" />
-    <SolidColorBrush x:Key="Cyan" Color="#19C3F0" />
-    <SolidColorBrush x:Key="Lime" Color="#B8D433" />
-    <SolidColorBrush x:Key="Warn" Color="#E5484D" />
-    <FontFamily x:Key="Display">Bahnschrift SemiCondensed, Bahnschrift, Microsoft YaHei UI</FontFamily>
-    <FontFamily x:Key="Body">Microsoft YaHei UI, Microsoft YaHei, Segoe UI</FontFamily>
-    <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Microsoft YaHei UI</FontFamily>
-    <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
-    <CornerRadius x:Key="OverlayCornerRadius">0</CornerRadius>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Default">
+          <SolidColorBrush x:Key="Ground" Color="#0A0B0B" />
+          <SolidColorBrush x:Key="Panel" Color="#121414" />
+          <SolidColorBrush x:Key="Card" Color="#181B1B" />
+          <SolidColorBrush x:Key="Line" Color="#34383A" />
+          <SolidColorBrush x:Key="LineSoft" Color="#232627" />
+          <SolidColorBrush x:Key="Text" Color="#ECEBE6" />
+          <SolidColorBrush x:Key="Muted" Color="#8A8E8F" />
+          <SolidColorBrush x:Key="Dim" Color="#5E6263" />
+          <SolidColorBrush x:Key="Accent" Color="#FFFA00" />
+          <SolidColorBrush x:Key="AccentOn" Color="#111111" />
+          <SolidColorBrush x:Key="TextOn" Color="#111111" />
+          <SolidColorBrush x:Key="AccentInk" Color="#FFFA00" />
+          <SolidColorBrush x:Key="Cyan" Color="#19C3F0" />
+          <SolidColorBrush x:Key="Lime" Color="#B8D433" />
+          <SolidColorBrush x:Key="Warn" Color="#E5484D" />
+          <SolidColorBrush x:Key="WarnWash" Color="#1AE5484D" />
+          <SolidColorBrush x:Key="GraphDots" Color="#1D2020" />
+          <SolidColorBrush x:Key="GraphBand" Color="#14191A" />
+          <SolidColorBrush x:Key="GraphBandEdge" Color="#232829" />
+          <SolidColorBrush x:Key="WaitFill" Color="#3A3806" />
+          <SolidColorBrush x:Key="SelectedStripe" Color="Transparent" />
+          <SolidColorBrush x:Key="CueWash" Color="#0FB8D433" />
+          <SolidColorBrush x:Key="PreviewGround" Color="#050606" />
+          <SolidColorBrush x:Key="PreviewCard" Color="#E6141616" />
+          <SolidColorBrush x:Key="PreviewEdge" Color="#24ECEBE6" />
+          <SolidColorBrush x:Key="PreviewRule" Color="#33ECEBE6" />
+          <SolidColorBrush x:Key="PreviewFill" Color="#1AECEBE6" />
+          <SolidColorBrush x:Key="PreviewTitle" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="PreviewSecond" Color="#D9FFFFFF" />
+          <SolidColorBrush x:Key="PreviewSub" Color="#8CFFFFFF" />
+          <SolidColorBrush x:Key="PreviewDim" Color="#4A4A48" />
+          <!-- Fluent draws the switch knob white, which disappears on #FFFA00 -->
+          <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#111111" />
+          <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#111111" />
+          <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#111111" />
+        </ResourceDictionary>
+
+        <!--
+          Light. #FFFA00 keeps its place as a fill (black text on top), but as a
+          hairline or as text it falls to 1.1:1 against the ground, so AccentInk
+          goes black and every two-pixel rule and every amber label follows it.
+          Cyan and lime only lose brightness; the hues are unchanged.
+        -->
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Ground" Color="#E7E7E2" />
+          <SolidColorBrush x:Key="Panel" Color="#F2F2EE" />
+          <SolidColorBrush x:Key="Card" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Line" Color="#C2C3BD" />
+          <SolidColorBrush x:Key="LineSoft" Color="#D9DAD4" />
+          <SolidColorBrush x:Key="Text" Color="#16181A" />
+          <SolidColorBrush x:Key="Muted" Color="#5C6164" />
+          <SolidColorBrush x:Key="Dim" Color="#8B9093" />
+          <SolidColorBrush x:Key="Accent" Color="#FFFA00" />
+          <SolidColorBrush x:Key="AccentOn" Color="#111111" />
+          <SolidColorBrush x:Key="TextOn" Color="#F2F2EE" />
+          <SolidColorBrush x:Key="AccentInk" Color="#111111" />
+          <SolidColorBrush x:Key="Cyan" Color="#0C7EA8" />
+          <SolidColorBrush x:Key="Lime" Color="#6B8300" />
+          <SolidColorBrush x:Key="Warn" Color="#C2282D" />
+          <SolidColorBrush x:Key="WarnWash" Color="#14C2282D" />
+          <SolidColorBrush x:Key="GraphDots" Color="#CBCCC5" />
+          <SolidColorBrush x:Key="GraphBand" Color="#DEDFD9" />
+          <SolidColorBrush x:Key="GraphBandEdge" Color="#CBCCC6" />
+          <SolidColorBrush x:Key="WaitFill" Color="#FFFBC2" />
+          <SolidColorBrush x:Key="SelectedStripe" Color="#FFFA00" />
+          <SolidColorBrush x:Key="CueWash" Color="#146B8300" />
+          <!-- the preview is schematic, not a screenshot, so it follows the theme -->
+          <SolidColorBrush x:Key="PreviewGround" Color="#E7E7E2" />
+          <SolidColorBrush x:Key="PreviewCard" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="PreviewEdge" Color="#C2C3BD" />
+          <SolidColorBrush x:Key="PreviewRule" Color="#C2C3BD" />
+          <SolidColorBrush x:Key="PreviewFill" Color="#D9DAD4" />
+          <SolidColorBrush x:Key="PreviewTitle" Color="#16181A" />
+          <SolidColorBrush x:Key="PreviewSecond" Color="#2E3134" />
+          <SolidColorBrush x:Key="PreviewSub" Color="#5C6164" />
+          <SolidColorBrush x:Key="PreviewDim" Color="#8B9093" />
+          <!-- Fluent draws the switch knob white, which disappears on #FFFA00 -->
+          <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#111111" />
+          <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#111111" />
+          <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#111111" />
+        </ResourceDictionary>
+
+      </ResourceDictionary.ThemeDictionaries>
+
+      <FontFamily x:Key="Display">Bahnschrift SemiCondensed, Bahnschrift, Microsoft YaHei UI</FontFamily>
+      <FontFamily x:Key="Body">Microsoft YaHei UI, Microsoft YaHei, Segoe UI</FontFamily>
+      <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Microsoft YaHei UI</FontFamily>
+      <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+      <CornerRadius x:Key="OverlayCornerRadius">0</CornerRadius>
+    </ResourceDictionary>
   </Application.Resources>
 
   <Application.Styles>
     <FluentTheme>
       <FluentTheme.Palettes>
         <ColorPaletteResources x:Key="Dark"
-                               Accent="#F0B429"
+                               Accent="#FFFA00"
                                RegionColor="#121414"
                                AltHigh="#0A0B0B"
                                ChromeMediumLow="#0A0B0B"
@@ -39,6 +124,17 @@
                                BaseHigh="#ECEBE6"
                                BaseMedium="#8A8E8F"
                                BaseLow="#34383A" />
+        <ColorPaletteResources x:Key="Light"
+                               Accent="#FFFA00"
+                               RegionColor="#F2F2EE"
+                               AltHigh="#FFFFFF"
+                               ChromeMediumLow="#E7E7E2"
+                               ChromeLow="#FFFFFF"
+                               ChromeMedium="#E2E3DD"
+                               ChromeHigh="#C2C3BD"
+                               BaseHigh="#16181A"
+                               BaseMedium="#5C6164"
+                               BaseLow="#C2C3BD" />
       </FluentTheme.Palettes>
     </FluentTheme>
   </Application.Styles>

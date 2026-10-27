@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Anaphora.Overlay;
 
 namespace Anaphora.App;
@@ -13,6 +14,19 @@ internal sealed record AnchorSetting(double X, double Y)
     public static AnchorSetting From(OverlayAnchor anchor) => new(anchor.X, anchor.Y);
 
     public OverlayAnchor ToAnchor() => new(X, Y);
+}
+
+/// <summary>
+/// Which palette the editor wears. The overlay is not covered: it lies on top
+/// of the game, whose own HUD is dark, so a light overlay would glare in every
+/// scene.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AppTheme>))]
+internal enum AppTheme
+{
+    System,
+    Light,
+    Dark,
 }
 
 /// <summary>What the user changed and expects to find again next time.</summary>
@@ -66,6 +80,12 @@ internal sealed record AppSettings
 
     /// <summary>The id of the library rotation the overlay follows.</summary>
     public string ActiveRotation { get; init; } = "endfield-example";
+
+    /// <summary>
+    /// The editor's palette. Dark by default: it is the game's own, and the app
+    /// is normally open beside the game.
+    /// </summary>
+    public AppTheme Theme { get; init; } = AppTheme.Dark;
 
     public static AppSettings Load()
     {

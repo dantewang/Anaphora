@@ -38,27 +38,37 @@ internal sealed class RotationGraph : Control
     private static readonly FontFamily Body = new("Microsoft YaHei UI, Segoe UI");
     private static readonly FontFamily Mono = new("Cascadia Mono, Consolas");
 
-    private static readonly IBrush Text = Brush("#ECEBE6");
-    private static readonly IBrush Muted = Brush("#8A8E8F");
-    private static readonly IBrush Dim = Brush("#5E6263");
-    private static readonly IBrush Card = Brush("#181B1B");
-    private static readonly IBrush Line = Brush("#34383A");
-    private static readonly IBrush Amber = Brush("#F0B429");
-    private static readonly IBrush AmberDeep = Brush("#3A2C0B");
-    private static readonly IBrush Cyan = Brush("#19C3F0");
-    private static readonly IBrush Lime = Brush("#B8D433");
-    private static readonly IBrush LimeWash = Brush("#0FB8D433");
-    private static readonly IBrush Ground = Brush("#0A0B0B");
-    private static readonly IBrush Dots = Brush("#1D2020");
-
-    /// <summary>Every other lane sits on a band, so where one segment ends is never in doubt.</summary>
-    private static readonly IBrush LaneBand = Brush("#14191A");
-    private static readonly IBrush LaneEdge = Brush("#232829");
+    private static readonly IBrush Missing = Brushes.Magenta;
 
     private readonly Dictionary<StepModel, Rect> cards = [];
     private readonly List<Lane> lanes = [];
     private RotationDocument? watched;
     private Size extent;
+
+    // The palette comes from the application's theme dictionaries, so it has to
+    // be read per variant rather than baked into static fields. Looked up once
+    // per theme and kept until the theme changes.
+    private IBrush Text = Missing;
+    private IBrush Muted = Missing;
+    private IBrush Dim = Missing;
+    private IBrush Card = Missing;
+    private IBrush Line = Missing;
+    private IBrush AmberInk = Missing;
+    private IBrush AmberDeep = Missing;
+    private IBrush Stripe = Missing;
+    private IBrush Cyan = Missing;
+    private IBrush Lime = Missing;
+    private IBrush LimeWash = Missing;
+    private IBrush Ground = Missing;
+    private IBrush Dots = Missing;
+    private IBrush LaneBand = Missing;
+    private IBrush LaneEdge = Missing;
+    private bool palettePicked;
+
+    public RotationGraph()
+    {
+        ActualThemeVariantChanged += OnThemeChanged;
+    }
 
     static RotationGraph()
     {
@@ -134,6 +144,8 @@ internal sealed class RotationGraph : Control
 
     public override void Render(DrawingContext context)
     {
+        Repalette();
+
         // A dotted ground, like the mockup's canvas.
         context.FillRectangle(Ground, new Rect(Bounds.Size));
         for (double y = 11; y < Bounds.Height; y += 22)
@@ -188,7 +200,45 @@ internal sealed class RotationGraph : Control
         }
     }
 
-    private static IBrush Brush(string colour) => new ImmutableSolidColorBrush(Color.Parse(colour));
+    /// <summary>
+    /// Reads the palette out of the theme dictionaries. Layout asks for it too,
+    /// because the gutter text is measured with the same brushes it is drawn
+    /// with, and measuring runs before the first render.
+    /// </summary>
+    private void Repalette()
+    {
+        if (palettePicked)
+        {
+            return;
+        }
+
+        palettePicked = true;
+        Text = Look("Text");
+        Muted = Look("Muted");
+        Dim = Look("Dim");
+        Card = Look("Card");
+        Line = Look("Line");
+        AmberInk = Look("AccentInk");
+        AmberDeep = Look("WaitFill");
+        Stripe = Look("SelectedStripe");
+        Cyan = Look("Cyan");
+        Lime = Look("Lime");
+        LimeWash = Look("CueWash");
+        Ground = Look("Ground");
+        Dots = Look("GraphDots");
+        LaneBand = Look("GraphBand");
+        LaneEdge = Look("GraphBandEdge");
+    }
+
+    private IBrush Look(string key) =>
+        this.TryFindResource(key, ActualThemeVariant, out object? found) && found is IBrush brush ? brush : Missing;
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        palettePicked = false;
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
 
     private static double Stack(int count) => count == 0 ? 0 : count * (ChipHeight + ChipGap) + 2;
 
@@ -205,6 +255,7 @@ internal sealed class RotationGraph : Control
     /// </summary>
     private void Layout()
     {
+        Repalette();
         cards.Clear();
         lanes.Clear();
         if (Document is not { } document)
@@ -275,10 +326,17 @@ internal sealed class RotationGraph : Control
             path.EndFigure(true);
         }
 
-        context.DrawGeometry(Card, new Pen(selected ? Amber : Line, selected ? 2 : 1), outline);
+        context.DrawGeometry(Card, new Pen(selected ? AmberInk : Line, selected ? 2 : 1), outline);
+        if (selected)
+        {
+            // Light theme only: the black outline alone reads as a thicker
+            // border, so the yellow comes back as a strip wide enough to see.
+            context.FillRectangle(Stripe, new Rect(rect.Left + 1, rect.Top + 1, 52, 5));
+        }
+
         if (document.Steps.Count > 0 && document.Steps[0] == step)
         {
-            context.FillRectangle(Amber, new Rect(rect.Left, rect.Top, 18, 2));
+            context.FillRectangle(AmberInk, new Rect(rect.Left, rect.Top, 18, 2));
         }
 
         int position = document.StepsIn(document.SegmentOf(step)).TakeWhile(s => s != step).Count() + 1;
@@ -287,7 +345,7 @@ internal sealed class RotationGraph : Control
         IBrush tone = step.Kind switch
         {
             ActionKind.Chain => Cyan,
-            ActionKind.Ultimate => Amber,
+            ActionKind.Ultimate => AmberInk,
             _ => Text,
         };
         // "3大招" is twice as wide as "3": keep it off the line below.
@@ -314,8 +372,8 @@ internal sealed class RotationGraph : Control
         for (int i = 0; i < step.Waits.Count; i++)
         {
             var chip = new Rect(rect.Left, rect.Bottom + ChipGap + (i * (ChipHeight + ChipGap)), rect.Width, ChipHeight);
-            context.DrawRectangle(AmberDeep, new Pen(Amber, 1), chip);
-            DrawCentred(context, $"等待 {step.Waits[i].ToCondition().Description}", Body, 11, Amber, chip);
+            context.DrawRectangle(AmberDeep, new Pen(AmberInk, 1), chip);
+            DrawCentred(context, $"等待 {step.Waits[i].ToCondition().Description}", Body, 11, AmberInk, chip);
         }
     }
 
@@ -329,7 +387,7 @@ internal sealed class RotationGraph : Control
     private void DrawEdges(DrawingContext context, RotationDocument document)
     {
         var plain = new Pen(Dim, 1.2);
-        var loop = new Pen(Amber, 1.2, new DashStyle([4, 3], 0));
+        var loop = new Pen(AmberInk, 1.2, new DashStyle([4, 3], 0));
         var branchPen = new Pen(Cyan, 1.2);
         var gutters = new Dictionary<Lane, int>();
 
@@ -346,7 +404,7 @@ internal sealed class RotationGraph : Control
                 if (newRound || !IsForward(from, to))
                 {
                     string label = newRound ? $"下一轮 · 回到 {document.Label(next)}" : $"回到 {document.Label(next)}";
-                    Around(step, from, next, to, newRound ? loop : plain, label, newRound ? Amber : Muted);
+                    Around(step, from, next, to, newRound ? loop : plain, label, newRound ? AmberInk : Muted);
                 }
                 else
                 {
@@ -484,7 +542,7 @@ internal sealed class RotationGraph : Control
     /// wrap inside the gutter: an edge arrow may run up through the lane right
     /// beside them, so text that ran past the label column would cross it.
     /// </summary>
-    private static FormattedText[] WayOut(RotationDocument document, BranchModel branch)
+    private FormattedText[] WayOut(RotationDocument document, BranchModel branch)
     {
         string target = document.Find(branch.To) is { } step ? document.Label(step) : branch.To;
         return

@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <None Include="../../rotations/*.json" Link="rotations/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the palette is read as XML, so the test wants the file, not the compiled resource -->
+    <None Include="../../src/Anaphora.App/App.axaml" Link="App.axaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

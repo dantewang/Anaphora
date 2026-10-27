@@ -20,11 +20,54 @@
 风格要点（从 `captures/` 的实拍里提取，后续可补充）：
 
 - 深色底，纯黑到深灰的层次，不带蓝调
-- 功能色高饱和：主色琥珀/金黄，状态色用青蓝与黄绿，警示用红
+- 功能色高饱和：主色是**纯黄 `#FFFA00`**（2026-10-27 用户定，原来是琥珀 `#F0B429`），
+  状态色用青蓝与黄绿，警示用红
 - 描边细，直角与 45° 切角混用，大量平行四边形与斜切分隔
 - 无衬线窄体，字重对比强，数字用等宽感的字形
 - 图标是白色实心剪影，压在深色圆形或圆角方形底板上
 - 元素之间靠细线和留白分隔，不靠色块堆叠
+
+### 两套配色（2026-10-27）
+
+**编辑器有深色和浅色两套，overlay 只有深色。** overlay 压在游戏画面上，游戏自己的 HUD
+就是深色的，浅色 overlay 在任何场景都会炸眼；`OverlayWindow` 写死 `RequestedThemeVariant="Dark"`，
+而且它本来就在 `Window.Resources` 里有一份自己的画刷，盖住应用级的同名键。
+**overlay 的主色仍是琥珀 `#F0B429`**，这轮没动。
+
+调色板在 `App.axaml` 的 `ResourceDictionary.ThemeDictionaries` 里，`Default`（深）和
+`Light` 两份。**`ThemeDictionaries` 里的资源只有 `DynamicResource` 找得到，`StaticResource`
+会在运行时抛异常**，所以 `MainWindow.axaml` 里每一个画刷引用都是 `DynamicResource`；
+字体和圆角是无变体的，留在字典顶层、仍用 `StaticResource`。
+
+黄色分成三个键，这是用户定的规则：
+
+| 键 | 深色 | 浅色 | 什么时候用 |
+|---|---|---|---|
+| `Accent` | `#FFFA00` | `#FFFA00` | 成片的黄底：logo 牌、主按钮、「使用中」徽标、大招 chip |
+| `AccentOn` | `#111111` | `#111111` | 压在黄底上的字，**永远是黑的** |
+| `AccentInk` | `#FFFA00` | `#111111` | 黄当细节用的时候：2px 下划线、1px 描边、纯黄的文字 |
+
+`#FFFA00` 在 `#E7E7E2` 上的对比度只有 1.1:1，**两个像素宽的黄在浅底上等于没画**，
+所以标签页下划线、轴库选中条、「● 未保存」、状态行、「下一轮」虚线全走 `AccentInk`。
+另有 `TextOn`（压在 `Text` 画刷上的字，深色 `#111111`／浅色 `#F2F2EE`）——`Text` 本身
+会随主题反转，所以选中的分段按钮和 overlay 预览 chip 不能写死黑字。
+
+**选中的卡片**在深色里是 2px 黄描边；浅色里描边变黑就只剩"粗一点"，所以加了
+`SelectedStripe`（深色 `Transparent`，浅色 `#FFFA00`）——卡片顶边一条 52×5 的黄。
+一个键换两种画法，`RotationGraph` 里不用判主题。
+
+青与黄绿在白底上会糊，浅色压成 `#0C7EA8` 和 `#6B8300`，色相不变。
+Fluent 的 `ToggleSwitch` 旋钮是白的，在 `#FFFA00` 上看不见，用
+`ToggleSwitchKnobFillOn{,PointerOver,Pressed}` 三个键改成黑的（两套都要）。
+
+`RotationGraph` 是自绘的，**画刷不能再是 `static readonly`**：改成实例字段，
+`Repalette()` 按 `ActualThemeVariant` 从资源里查一次，构造函数挂
+`ActualThemeVariantChanged` 清缓存。`Layout()` 也要先 `Repalette()`——泳道高度靠量
+gutter 文字算出来，而测量跑在第一次 `Render` 之前。查不到的键画成品红（`Missing`），
+一眼就能发现漏了哪个。
+
+`ThemeTests` 比对两份字典的键集合必须完全一致。**往调色板加颜色时两边都要加**，
+只加一边的后果是图上一块品红，或者 XAML 里什么都不画。
 
 ## 技术选型
 
@@ -125,6 +168,8 @@ Avalonia 12 的 breaking change 之一是移除了免费的 F12 DevTools ——
   下方快速输入、右边步骤属性和 overlay 预览；另有设定页。启动时打开，关窗只是隐藏，托盘可再打开。
   托盘仍保留状态面板、隐藏、轴回到开头、跳过一步、退出这些快捷开关，和设定页双向同步。
   设定记在 `%LOCALAPPDATA%\Anaphora\settings.json`，日志在同目录 `app.log`。
+  设定页的「外观」卡片三档切配色（`theme`：`System` / `Light` / `Dark`，默认 `Dark`），
+  `App.Wear()` 把它翻成 `RequestedThemeVariant`，`System` 就是 `ThemeVariant.Default`。
 - **轴库**在 `%LOCALAPPDATA%\Anaphora\rotations\<id>.json`，随程序发的轴缺哪个补哪个（不覆盖用户改过的）。
   `settings.json` 的 `activeRotation` 是 overlay 跟的那条；`--rotation` 命令行参数优先。
   导入（文件/剪贴板，id 冲突自动改名）、导出（文件/剪贴板）、复制、新建；改了没存的轴留在内存里，

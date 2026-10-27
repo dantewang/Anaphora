@@ -700,6 +700,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial string? HotkeyError { get; set; }
 
+    [ObservableProperty]
+    public partial AppTheme Theme { get; set; }
+
+    partial void OnThemeChanged(AppTheme value) => Store(host.Settings with { Theme = value });
+
     partial void OnTrackVisibleChanged(bool value) => Store(host.Settings with { TrackVisible = value });
 
     partial void OnHideWhenHudAbsentChanged(bool value) => Store(host.Settings with { HideWhenHudAbsent = value });
@@ -752,6 +757,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         UltimateHoldMs = host.Settings.UltimateHoldMs;
         ResetHotkey = host.Settings.ResetHotkey ?? string.Empty;
         MoveHotkey = host.Settings.MoveHotkey ?? string.Empty;
+        Theme = host.Settings.Theme;
         loading = false;
     }
 }

@@ -5,6 +5,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 
 namespace Anaphora.App;
 
@@ -27,6 +28,8 @@ public partial class App : Application
                 library.Seed(Path.Combine(AppContext.BaseDirectory, "rotations"));
 
                 host = new AnaphoraHost(AppOptions.Current, AppSettings.Load(), library);
+                Wear(host.Settings.Theme);
+                host.SettingsChanged += () => Wear(host.Settings.Theme);
                 host.Start();
                 window = new MainWindow(new MainViewModel(host));
                 TrayIcon.SetIcons(this, [BuildTray(host, desktop)]);
@@ -43,6 +46,17 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    /// <summary>
+    /// Puts the editor in the chosen palette. "System" is Avalonia's Default,
+    /// which follows Windows. The overlay pins itself to dark and is unaffected.
+    /// </summary>
+    private void Wear(AppTheme theme) => RequestedThemeVariant = theme switch
+    {
+        AppTheme.Light => ThemeVariant.Light,
+        AppTheme.Dark => ThemeVariant.Dark,
+        _ => ThemeVariant.Default,
+    };
 
     private void ShowWindow()
     {

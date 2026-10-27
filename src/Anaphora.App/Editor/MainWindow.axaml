@@ -7,7 +7,7 @@
         Title="Anaphora"
         Width="1480" Height="920" MinWidth="1100" MinHeight="680"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource Panel}"
+        Background="{DynamicResource Panel}"
         FontFamily="{StaticResource Body}"
         FontSize="13">
 
@@ -21,6 +21,7 @@
        ground, amber for "this one", cyan for chains, lime dashes for soft cues. -->
   <Window.Resources>
     <ed:IntEqualsConverter x:Key="IsInt" />
+    <ed:EnumEqualsConverter x:Key="IsEnum" />
 
     <!-- the overlay's title-card face, so the preview shows the real thing -->
     <FontFamily x:Key="Title">Arial Black, Segoe UI Black, Microsoft YaHei UI</FontFamily>
@@ -47,14 +48,14 @@
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="LetterSpacing" Value="1.6" />
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
     </Style>
     <Style Selector="TextBlock.muted">
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
       <Setter Property="FontSize" Value="12" />
     </Style>
     <Style Selector="TextBlock.dim">
-      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="Foreground" Value="{DynamicResource Dim}" />
       <Setter Property="FontSize" Value="11.5" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
@@ -69,14 +70,14 @@
                          FontSize="14" LetterSpacing="1" Foreground="{TemplateBinding Foreground}" />
               <TextBlock Text="{TemplateBinding Tag}" FontSize="12" Foreground="{TemplateBinding Foreground}" />
             </StackPanel>
-            <Border Name="bar" Height="2" Margin="14,0" VerticalAlignment="Bottom" Background="{StaticResource Amber}" IsVisible="False" />
+            <Border Name="bar" Height="2" Margin="14,0" VerticalAlignment="Bottom" Background="{DynamicResource AccentInk}" IsVisible="False" />
           </Panel>
         </ControlTemplate>
       </Setter>
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
     </Style>
     <Style Selector="RadioButton.tab:checked">
-      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
     </Style>
     <Style Selector="RadioButton.tab:checked /template/ Border#bar">
       <Setter Property="IsVisible" Value="True" />
@@ -86,7 +87,7 @@
     <Style Selector="RadioButton.seg">
       <Setter Property="Template">
         <ControlTemplate>
-          <Border Name="box" Background="Transparent" BorderBrush="{StaticResource Line}" BorderThickness="1"
+          <Border Name="box" Background="Transparent" BorderBrush="{DynamicResource Line}" BorderThickness="1"
                   MinWidth="32" Padding="10,4" Margin="0,0,-1,0">
             <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center"
                        FontFamily="{StaticResource Display}" FontWeight="SemiBold" FontSize="13"
@@ -94,17 +95,17 @@
           </Border>
         </ControlTemplate>
       </Setter>
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
     </Style>
     <Style Selector="RadioButton.seg:pointerover /template/ Border#box">
-      <Setter Property="BorderBrush" Value="{StaticResource Muted}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Muted}" />
     </Style>
     <Style Selector="RadioButton.seg:checked /template/ Border#box">
-      <Setter Property="Background" Value="{StaticResource Text}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Text}" />
+      <Setter Property="Background" Value="{DynamicResource Text}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Text}" />
     </Style>
     <Style Selector="RadioButton.seg:checked">
-      <Setter Property="Foreground" Value="#111111" />
+      <Setter Property="Foreground" Value="{DynamicResource TextOn}" />
     </Style>
 
     <!-- buttons: flat, one cut corner -->
@@ -120,23 +121,23 @@
           </Panel>
         </ControlTemplate>
       </Setter>
-      <Setter Property="Background" Value="{StaticResource Card}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Background" Value="{DynamicResource Card}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
       <Setter Property="Padding" Value="11,6" />
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button:pointerover">
-      <Setter Property="BorderBrush" Value="{StaticResource Muted}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Muted}" />
     </Style>
     <Style Selector="Button:disabled">
-      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="Foreground" Value="{DynamicResource Dim}" />
     </Style>
     <Style Selector="Button.primary">
-      <Setter Property="Background" Value="{StaticResource Amber}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
-      <Setter Property="Foreground" Value="#111111" />
+      <Setter Property="Background" Value="{DynamicResource Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentOn}" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style Selector="Button.ghost">
@@ -146,18 +147,18 @@
       <Setter Property="Template">
         <ControlTemplate>
           <Panel Background="Transparent">
-            <ov:ShapeDecorator Stroke="{StaticResource Line}" Dashed="True" />
+            <ov:ShapeDecorator Stroke="{DynamicResource Line}" Dashed="True" />
             <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}"
                               Foreground="{TemplateBinding Foreground}" />
           </Panel>
         </ControlTemplate>
       </Setter>
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
       <Setter Property="Padding" Value="8,3" />
       <Setter Property="FontSize" Value="12" />
     </Style>
     <Style Selector="Button.add:pointerover">
-      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
     </Style>
     <Style Selector="Button.x">
       <Setter Property="Template">
@@ -166,16 +167,16 @@
                      Padding="4,0" VerticalAlignment="Center" />
         </ControlTemplate>
       </Setter>
-      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="Foreground" Value="{DynamicResource Dim}" />
     </Style>
     <Style Selector="Button.x:pointerover">
-      <Setter Property="Foreground" Value="{StaticResource Warn}" />
+      <Setter Property="Foreground" Value="{DynamicResource Warn}" />
     </Style>
 
     <!-- inputs -->
     <Style Selector="TextBox, ComboBox">
-      <Setter Property="Background" Value="{StaticResource Ground}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Background" Value="{DynamicResource Ground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="0" />
       <Setter Property="MinHeight" Value="28" />
@@ -197,7 +198,7 @@
     </Style>
     <Style Selector="TextBox.title:pointerover /template/ Border, TextBox.title:focus /template/ Border">
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
     </Style>
     <Style Selector="TextBox.mono">
       <Setter Property="FontFamily" Value="{StaticResource Mono}" />
@@ -209,22 +210,23 @@
       <Setter Property="Spacing" Value="8" />
     </Style>
     <Style Selector="Border.item">
-      <Setter Property="Background" Value="{StaticResource Card}" />
+      <Setter Property="Background" Value="{DynamicResource Card}" />
       <Setter Property="BorderThickness" Value="2,0,0,0" />
       <Setter Property="Padding" Value="8,5" />
     </Style>
     <Style Selector="Border.item.cue">
-      <Setter Property="BorderBrush" Value="{StaticResource Lime}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Lime}" />
     </Style>
     <Style Selector="Border.item.wait">
-      <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentInk}" />
+      <Setter Property="Background" Value="{DynamicResource WaitFill}" />
     </Style>
     <Style Selector="Border.item.edge">
-      <Setter Property="BorderBrush" Value="{StaticResource Cyan}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Cyan}" />
     </Style>
     <Style Selector="Border.rule">
       <Setter Property="Height" Value="1" />
-      <Setter Property="Background" Value="{StaticResource LineSoft}" />
+      <Setter Property="Background" Value="{DynamicResource LineSoft}" />
     </Style>
 
     <!-- library rows -->
@@ -239,8 +241,8 @@
       <Setter Property="CornerRadius" Value="0" />
     </Style>
     <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource Card}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Background" Value="{DynamicResource Card}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="ListBoxItem:selected Border.accent">
@@ -250,27 +252,27 @@
       <Setter Property="Width" Value="16" />
       <Setter Property="Height" Value="16" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
     </Style>
     <Style Selector="Border.slot TextBlock">
       <Setter Property="FontFamily" Value="{StaticResource Display}" />
       <Setter Property="FontSize" Value="10" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Border.slot.on">
-      <Setter Property="BorderBrush" Value="{StaticResource Text}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Text}" />
     </Style>
     <Style Selector="Border.slot.on TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
     </Style>
 
     <!-- overlay preview chips, as the overlay draws them -->
     <Style Selector="ov|ShapeDecorator.chip">
       <Setter Property="Slant" Value="7" />
-      <Setter Property="Fill" Value="{StaticResource Text}" />
+      <Setter Property="Fill" Value="{DynamicResource Text}" />
       <Setter Property="Height" Value="36" />
       <Setter Property="MinWidth" Value="40" />
       <Setter Property="Padding" Value="12,0" />
@@ -279,29 +281,34 @@
       <Setter Property="FontFamily" Value="{StaticResource Display}" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="FontSize" Value="22" />
-      <Setter Property="Foreground" Value="#111111" />
+      <Setter Property="Foreground" Value="{DynamicResource TextOn}" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="ov|ShapeDecorator.chip TextBlock.badge">
       <Setter Property="FontSize" Value="11" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Foreground" Value="#4A4A48" />
+      <Setter Property="Foreground" Value="{DynamicResource PreviewDim}" />
       <Setter Property="VerticalAlignment" Value="Bottom" />
       <Setter Property="Margin" Value="0,0,0,7" />
     </Style>
     <Style Selector="ov|ShapeDecorator.chip.chain">
-      <Setter Property="Fill" Value="{StaticResource Cyan}" />
+      <Setter Property="Fill" Value="{DynamicResource Cyan}" />
     </Style>
     <Style Selector="ov|ShapeDecorator.chip.ult">
-      <Setter Property="Fill" Value="{StaticResource Amber}" />
+      <Setter Property="Fill" Value="{DynamicResource Accent}" />
+    </Style>
+    <!-- the chip face follows Text, which inverts with the theme; the ult chip
+         is the one yellow face, and yellow always carries black. -->
+    <Style Selector="ov|ShapeDecorator.chip.ult TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource AccentOn}" />
     </Style>
     <Style Selector="ov|ShapeDecorator.chip.cue">
-      <Setter Property="Fill" Value="#0FB8D433" />
-      <Setter Property="Stroke" Value="{StaticResource Lime}" />
+      <Setter Property="Fill" Value="{DynamicResource CueWash}" />
+      <Setter Property="Stroke" Value="{DynamicResource Lime}" />
       <Setter Property="Dashed" Value="True" />
     </Style>
     <Style Selector="ov|ShapeDecorator.chip.cue TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Lime}" />
+      <Setter Property="Foreground" Value="{DynamicResource Lime}" />
       <Setter Property="FontFamily" Value="{StaticResource Body}" />
     </Style>
     <Style Selector="ov|ShapeDecorator.chip.cue TextBlock.main">
@@ -312,16 +319,16 @@
       <Setter Property="MinWidth" Value="28" />
       <Setter Property="Padding" Value="8,0" />
       <Setter Property="Fill" Value="Transparent" />
-      <Setter Property="Stroke" Value="#33ECEBE6" />
+      <Setter Property="Stroke" Value="{DynamicResource PreviewRule}" />
     </Style>
     <Style Selector="ItemsControl.next ov|ShapeDecorator.chip TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
     </Style>
     <Style Selector="ItemsControl.next ov|ShapeDecorator.chip.cue">
-      <Setter Property="Stroke" Value="#99B8D433" />
+      <Setter Property="Stroke" Value="{DynamicResource Lime}" />
     </Style>
     <Style Selector="ItemsControl.next ov|ShapeDecorator.chip.cue TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Lime}" />
+      <Setter Property="Foreground" Value="{DynamicResource Lime}" />
     </Style>
     <Style Selector="ItemsControl.next ov|ShapeDecorator.chip TextBlock.main">
       <Setter Property="FontSize" Value="13" />
@@ -329,10 +336,10 @@
     <Style Selector="ItemsControl.next ov|ShapeDecorator.chip TextBlock.badge">
       <Setter Property="FontSize" Value="9" />
       <Setter Property="Margin" Value="0,0,0,4" />
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
     </Style>
     <Style Selector="TextBlock.then">
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="FontSize" Value="18" />
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -343,8 +350,8 @@
 
     <!-- settings cards -->
     <Style Selector="Border.card">
-      <Setter Property="Background" Value="{StaticResource Card}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Background" Value="{DynamicResource Card}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Padding" Value="16,14" />
       <Setter Property="Width" Value="380" />
@@ -355,10 +362,10 @@
   <Grid RowDefinitions="44,*">
 
     <!-- title strip -->
-    <Grid ColumnDefinitions="Auto,Auto,*,Auto" Background="{StaticResource Ground}">
-      <ov:ShapeDecorator Slant="0" Fill="{StaticResource Amber}" Padding="14,0,22,0">
+    <Grid ColumnDefinitions="Auto,Auto,*,Auto" Background="{DynamicResource Ground}">
+      <ov:ShapeDecorator Slant="0" Fill="{DynamicResource Accent}" Padding="14,0,22,0">
         <TextBlock Text="ANAPHORA" VerticalAlignment="Center" FontFamily="{StaticResource Display}"
-                   FontWeight="Bold" FontSize="12" LetterSpacing="2.4" Foreground="#111111" />
+                   FontWeight="Bold" FontSize="12" LetterSpacing="2.4" Foreground="{DynamicResource AccentOn}" />
       </ov:ShapeDecorator>
       <StackPanel Grid.Column="1" Orientation="Horizontal">
         <RadioButton x:Name="RotationTab" Classes="tab" GroupName="page" Content="ROTATION" Tag="轴" IsChecked="True" />
@@ -368,7 +375,7 @@
         <TextBlock Classes="muted" Text="overlay 使用：" />
         <TextBlock FontSize="12" Text="{Binding InUseName}" />
       </StackPanel>
-      <Border Grid.ColumnSpan="4" Height="1" VerticalAlignment="Bottom" Background="{StaticResource Line}" />
+      <Border Grid.ColumnSpan="4" Height="1" VerticalAlignment="Bottom" Background="{DynamicResource Line}" />
     </Grid>
 
     <!-- rotation page -->
@@ -384,14 +391,14 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="ed:LibraryItem">
               <Panel>
-                <Border Classes="accent" Width="2" HorizontalAlignment="Left" Background="{StaticResource Amber}" IsVisible="False" />
+                <Border Classes="accent" Width="2" HorizontalAlignment="Left" Background="{DynamicResource AccentInk}" IsVisible="False" />
                 <StackPanel Margin="12,9,10,9" Spacing="6">
                   <DockPanel>
-                    <Border DockPanel.Dock="Right" Background="{StaticResource Amber}" Padding="6,2" VerticalAlignment="Center"
+                    <Border DockPanel.Dock="Right" Background="{DynamicResource Accent}" Padding="6,2" VerticalAlignment="Center"
                             IsVisible="{Binding InUse}">
-                      <TextBlock Text="使用中" FontSize="10.5" FontWeight="Bold" Foreground="#111111" />
+                      <TextBlock Text="使用中" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource AccentOn}" />
                     </Border>
-                    <TextBlock DockPanel.Dock="Right" Text="●" Foreground="{StaticResource Amber}" Margin="0,0,6,0"
+                    <TextBlock DockPanel.Dock="Right" Text="●" Foreground="{DynamicResource AccentInk}" Margin="0,0,6,0"
                                FontSize="10" VerticalAlignment="Center" IsVisible="{Binding Dirty}" ToolTip.Tip="未保存" />
                     <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
                   </DockPanel>
@@ -436,9 +443,9 @@
               </MenuFlyout>
             </Button.Flyout>
           </Button>
-          <Border Grid.ColumnSpan="4" Height="1" Margin="-12,-12,-12,0" VerticalAlignment="Top" Background="{StaticResource LineSoft}" />
+          <Border Grid.ColumnSpan="4" Height="1" Margin="-12,-12,-12,0" VerticalAlignment="Top" Background="{DynamicResource LineSoft}" />
         </Grid>
-        <Border Grid.RowSpan="3" Width="1" HorizontalAlignment="Right" Background="{StaticResource Line}" />
+        <Border Grid.RowSpan="3" Width="1" HorizontalAlignment="Right" Background="{DynamicResource Line}" />
       </Grid>
 
       <!-- editor -->
@@ -458,7 +465,7 @@
                            IsChecked="{Binding Document.ControlledSlot, Converter={StaticResource IsInt}, ConverterParameter=4}" />
             </StackPanel>
           </StackPanel>
-          <TextBlock Grid.Column="2" Text="● 未保存" Foreground="{StaticResource Amber}" FontSize="12"
+          <TextBlock Grid.Column="2" Text="● 未保存" Foreground="{DynamicResource AccentInk}" FontSize="12"
                      VerticalAlignment="Center" IsVisible="{Binding Selected.Dirty, FallbackValue=False}" />
           <Button Grid.Column="3" Classes="ghost" Content="{Binding UseLabel}" Command="{Binding UseForOverlayCommand}"
                   IsEnabled="{Binding !Selected.InUse, FallbackValue=False}" />
@@ -479,18 +486,18 @@
           </StackPanel>
           <StackPanel Spacing="2" VerticalAlignment="Center">
             <TextBlock Classes="muted" Text="{Binding Summary}" />
-            <TextBlock FontSize="12" Foreground="{StaticResource Amber}" Text="{Binding Status}"
+            <TextBlock FontSize="12" Foreground="{DynamicResource AccentInk}" Text="{Binding Status}"
                        IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>
         </DockPanel>
 
-        <Border Grid.Row="2" Margin="18,0,18,8" Padding="10,6" BorderBrush="{StaticResource Warn}" BorderThickness="2,0,0,0"
-                Background="#1AE5484D" IsVisible="{Binding HasProblems}">
-          <TextBlock Text="{Binding Problems}" FontSize="12" Foreground="{StaticResource Text}" TextWrapping="Wrap" />
+        <Border Grid.Row="2" Margin="18,0,18,8" Padding="10,6" BorderBrush="{DynamicResource Warn}" BorderThickness="2,0,0,0"
+                Background="{DynamicResource WarnWash}" IsVisible="{Binding HasProblems}">
+          <TextBlock Text="{Binding Problems}" FontSize="12" Foreground="{DynamicResource Text}" TextWrapping="Wrap" />
         </Border>
 
         <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                      Background="{StaticResource Ground}">
+                      Background="{DynamicResource Ground}">
           <ed:RotationGraph Document="{Binding Document}" SelectedStep="{Binding SelectedStep}"
                             HorizontalAlignment="Left" VerticalAlignment="Top"
                             ContextRequested="OnGraphContextRequested">
@@ -523,15 +530,15 @@
           </ed:RotationGraph>
         </ScrollViewer>
 
-        <Border Grid.Row="4" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="18,10,18,12">
+        <Border Grid.Row="4" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,10,18,12">
           <StackPanel Spacing="6">
             <DockPanel>
               <TextBlock DockPanel.Dock="Right" Classes="dim" Text="只替换所选的一段；分支和条件在右边改" />
               <TextBlock Classes="muted">
                 <Run Text="快速输入：空格或 → 分隔，" />
-                <Run Text="~" FontFamily="{StaticResource Mono}" Foreground="{StaticResource Text}" />
+                <Run Text="~" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource Text}" />
                 <Run Text=" 开头是软提示，" />
-                <Run Text="~1重击  ~3普攻2  ~&quot;文字&quot;" FontFamily="{StaticResource Mono}" Foreground="{StaticResource Text}" />
+                <Run Text="~1重击  ~3普攻2  ~&quot;文字&quot;" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource Text}" />
               </TextBlock>
             </DockPanel>
             <Grid ColumnDefinitions="Auto,Auto,110,*,Auto" ColumnSpacing="8">
@@ -551,7 +558,7 @@
               </TextBox>
               <Button Grid.Column="4" Content="替换这一段" Command="{Binding ApplyQuickCommand}" />
             </Grid>
-            <TextBlock FontSize="12" Foreground="{StaticResource Warn}" Text="{Binding QuickError}"
+            <TextBlock FontSize="12" Foreground="{DynamicResource Warn}" Text="{Binding QuickError}"
                        IsVisible="{Binding QuickError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>
         </Border>
@@ -559,7 +566,7 @@
 
       <!-- inspector -->
       <Grid x:Name="Inspector" Grid.Column="2" RowDefinitions="*,Auto">
-        <Border Width="1" HorizontalAlignment="Left" Grid.RowSpan="2" Background="{StaticResource Line}" />
+        <Border Width="1" HorizontalAlignment="Left" Grid.RowSpan="2" Background="{DynamicResource Line}" />
         <ScrollViewer Margin="1,0,0,0" IsVisible="{Binding HasStep}">
           <StackPanel>
             <StackPanel Classes="group">
@@ -594,7 +601,7 @@
               </StackPanel>
               <TextBlock Classes="muted" TextWrapping="Wrap">
                 <Run Text="玩家要做的：" />
-                <Run Text="{Binding SelectedStep.KeyText, FallbackValue=''}" Foreground="{StaticResource Text}" />
+                <Run Text="{Binding SelectedStep.KeyText, FallbackValue=''}" Foreground="{DynamicResource Text}" />
               </TextBlock>
             </StackPanel>
             <Border Classes="rule" />
@@ -830,12 +837,12 @@
         </ScrollViewer>
 
         <!-- what the overlay shows at this step -->
-        <Border Grid.Row="1" Margin="1,0,0,0" Background="#050606" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
+        <Border Grid.Row="1" Margin="1,0,0,0" Background="{DynamicResource PreviewGround}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0"
                 Padding="16,12,16,16" IsVisible="{Binding HasStep}">
           <StackPanel Spacing="8">
             <TextBlock Classes="h" Text="OVERLAY  走到这一步时显示" />
             <Panel>
-              <ov:ShapeDecorator Chamfer="12" Fill="#E6141616" Stroke="#24ECEBE6">
+              <ov:ShapeDecorator Chamfer="12" Fill="{DynamicResource PreviewCard}" Stroke="{DynamicResource PreviewEdge}">
                 <StackPanel Margin="12,10,12,12" Spacing="8">
                   <!-- the title card, shrunk to fit the sidebar -->
                   <StackPanel HorizontalAlignment="Center" Spacing="0">
@@ -851,15 +858,15 @@
                          the face's own 1.33 em clips the glyph (see OverlayWindow) -->
                     <TextBlock Text="{Binding PreviewAction.Glyph}" HorizontalAlignment="Center"
                                FontFamily="{StaticResource Title}" FontSize="53" LetterSpacing="1.2"
-                               Margin="0,-12,0,-13" Foreground="White" />
+                               Margin="0,-12,0,-13" Foreground="{DynamicResource PreviewTitle}" />
                     <TextBlock Text="{Binding PreviewAction.Second}" HorizontalAlignment="Center" Margin="2,3,0,0"
-                               FontWeight="Bold" FontSize="16" LetterSpacing="2.2" Foreground="#D9FFFFFF" />
+                               FontWeight="Bold" FontSize="16" LetterSpacing="2.2" Foreground="{DynamicResource PreviewSecond}" />
                     <TextBlock Text="{Binding PreviewAction.Sub}" HorizontalAlignment="Center" Margin="3,3,0,0"
-                               FontFamily="{StaticResource Title}" FontSize="7" LetterSpacing="3" Foreground="#8CFFFFFF" />
+                               FontFamily="{StaticResource Title}" FontSize="7" LetterSpacing="3" Foreground="{DynamicResource PreviewSub}" />
                   </StackPanel>
-                  <TextBlock FontSize="12" Foreground="{StaticResource Amber}" TextWrapping="Wrap" Text="{Binding PreviewHint}"
+                  <TextBlock FontSize="12" Foreground="{DynamicResource AccentInk}" TextWrapping="Wrap" Text="{Binding PreviewHint}"
                              IsVisible="{Binding HasPreviewHint}" />
-                  <Border Classes="rule" Background="#1AECEBE6" />
+                  <Border Classes="rule" Background="{DynamicResource PreviewFill}" />
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Classes="muted" Text="接下来" VerticalAlignment="Center" />
                     <ItemsControl Classes="next" ItemsSource="{Binding PreviewNext}" ItemTemplate="{StaticResource PreviewChip}">
@@ -872,7 +879,7 @@
                   </StackPanel>
                 </StackPanel>
               </ov:ShapeDecorator>
-              <Border Width="26" Height="2" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{StaticResource Amber}" />
+              <Border Width="26" Height="2" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{DynamicResource AccentInk}" />
             </Panel>
           </StackPanel>
         </Border>
@@ -882,6 +889,27 @@
     <!-- settings page -->
     <ScrollViewer Grid.Row="1" IsVisible="{Binding #SettingsTab.IsChecked}">
       <WrapPanel Margin="28,24">
+        <Border Classes="card">
+          <StackPanel Spacing="14">
+            <TextBlock Classes="h" Text="APPEARANCE  外观" />
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <RadioButton Classes="seg" GroupName="theme" Content="跟随系统"
+                             IsChecked="{Binding Settings.Theme, Converter={StaticResource IsEnum}, ConverterParameter=System}" />
+                <RadioButton Classes="seg" GroupName="theme" Content="浅色"
+                             IsChecked="{Binding Settings.Theme, Converter={StaticResource IsEnum}, ConverterParameter=Light}" />
+                <RadioButton Classes="seg" GroupName="theme" Content="深色"
+                             IsChecked="{Binding Settings.Theme, Converter={StaticResource IsEnum}, ConverterParameter=Dark}" />
+              </StackPanel>
+              <StackPanel Spacing="2">
+                <TextBlock Text="配色" />
+                <TextBlock Classes="dim" TextWrapping="Wrap"
+                           Text="只管这个窗口。overlay 永远是深色：它压在游戏画面上，游戏自己的 HUD 就是深色的。" />
+              </StackPanel>
+            </DockPanel>
+          </StackPanel>
+        </Border>
+
         <Border Classes="card">
           <StackPanel Spacing="14">
             <TextBlock Classes="h" Text="OVERLAY" />
@@ -955,7 +983,7 @@
                            Text="开了之后 overlay 接管鼠标，拖到想要的地方，再按一次或点它上面的「完成」退出。游戏战斗中常把光标锁住，那时要先开个菜单放开鼠标。" />
               </StackPanel>
             </DockPanel>
-            <TextBlock FontSize="12" Foreground="{StaticResource Warn}" Text="{Binding Settings.HotkeyError}"
+            <TextBlock FontSize="12" Foreground="{DynamicResource Warn}" Text="{Binding Settings.HotkeyError}"
                        IsVisible="{Binding Settings.HotkeyError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>
         </Border>

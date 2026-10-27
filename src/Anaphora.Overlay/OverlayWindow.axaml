@@ -4,6 +4,7 @@
         x:Class="Anaphora.Overlay.OverlayWindow"
         x:DataType="local:OverlayViewModel"
         Title="Anaphora Overlay"
+        RequestedThemeVariant="Dark"
         WindowDecorations="None"
         Background="Transparent"
         TransparencyLevelHint="Transparent"
