@@ -235,6 +235,86 @@ public class RotationStoreTests
     }
 
     [Fact]
+    public void AnOrBranchAndASegmentsWayOutRoundTrip()
+    {
+        Rotation rotation = Example with
+        {
+            Segments =
+            [
+                new RotationSegment("main", "主线")
+                {
+                    Branches =
+                    [
+                        new RotationBranch
+                        {
+                            When = [StepCondition.Parse("ult:1"), StepCondition.Parse("ult:2")],
+                            To = "b",
+                        },
+                    ],
+                },
+                new RotationSegment("burst", "爆发"),
+            ],
+            Steps =
+            [
+                new RotationStep
+                {
+                    Id = "a",
+                    Segment = "main",
+                    Action = RotationAction.Parse("3"),
+                    Branches =
+                    [
+                        new RotationBranch
+                        {
+                            Match = BranchMatch.Any,
+                            When = [StepCondition.Parse("chain:1"), StepCondition.Parse("chain:2")],
+                            To = "b",
+                        },
+                    ],
+                },
+                new RotationStep { Id = "b", Segment = "burst", Action = RotationAction.Parse("1大招"), Next = "a", NewRound = true },
+            ],
+        };
+
+        string json = RotationStore.Serialize(rotation);
+
+        // "all" is the default and stays out of the file; "any" has to be said.
+        Assert.Contains("\"match\": \"Any\"", json, StringComparison.Ordinal);
+        Assert.Equal(1, Count(json, "\"match\""));
+        Assert.Equal(rotation, RotationStore.Deserialize(json));
+
+        static int Count(string text, string needle)
+        {
+            int found = 0;
+            for (int at = text.IndexOf(needle, StringComparison.Ordinal); at >= 0; at = text.IndexOf(needle, at + 1, StringComparison.Ordinal))
+            {
+                found++;
+            }
+
+            return found;
+        }
+    }
+
+    [Fact]
+    public void ASegmentsWayOutIntoItselfIsRefused()
+    {
+        Rotation rotation = Example with
+        {
+            Segments =
+            [
+                new RotationSegment("opening", "开局")
+                {
+                    Branches = [new RotationBranch { When = [StepCondition.Parse("ult:1")], To = "o3" }],
+                },
+                new RotationSegment("cycle", "循环"),
+            ],
+        };
+
+        IReadOnlyList<ProfileProblem> problems = RotationValidator.Validate(rotation);
+
+        Assert.Contains(problems, p => p.Severity == ProfileProblemSeverity.Error && p.Message.Contains("same segment", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void TheExampleValidatesAgainstTheEndfieldProfile()
     {
         GameProfile profile = ProfileStore.Load(Path.Combine(AppContext.BaseDirectory, "profiles", "endfield.json"));

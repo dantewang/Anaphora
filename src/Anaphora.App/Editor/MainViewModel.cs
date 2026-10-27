@@ -412,6 +412,19 @@ internal sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void AddSegment()
+    {
+        if (Document is not { } document)
+        {
+            return;
+        }
+
+        SelectedStep = document.AddSegment();
+        QuickSegment = document.SegmentOf(SelectedStep);
+        Status = $"加了一段：{QuickSegment.Name}。还没有谁指向它，去向在右边设。";
+    }
+
+    [RelayCommand]
     private void SplitSegment()
     {
         if (Document is not { } document || SelectedStep is not { } step)

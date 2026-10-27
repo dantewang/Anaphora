@@ -19,6 +19,80 @@ public class RotationDocumentTests
     }
 
     [Fact]
+    public void ABranchKeepsEveryConditionAndWhetherTheyAreAndOrOr()
+    {
+        // The user's gate: charge until 1, 2 and 4 can all ult. Written as one
+        // branch with three conditions, which the old form could not hold on to.
+        Rotation source = Example with
+        {
+            Steps =
+            [
+                Example.Steps[0] with
+                {
+                    Branches =
+                    [
+                        new RotationBranch
+                        {
+                            Match = BranchMatch.Any,
+                            When = [StepCondition.Parse("ult:1"), StepCondition.Parse("ult:2"), StepCondition.Parse("ult:4")],
+                            To = "c1",
+                        },
+                    ],
+                },
+                .. Example.Steps.Skip(1),
+            ],
+        };
+
+        var document = RotationDocument.From(source);
+        BranchModel branch = document.Steps[0].Branches.Single();
+
+        Assert.Equal(3, branch.Conditions.Count);
+        Assert.True(branch.HasChoiceOfMatch);
+        Assert.Equal("1 大招就绪 或 2 大招就绪 或 4 大招就绪", branch.Summary);
+        Assert.Equal(source, document.ToRotation());
+    }
+
+    [Fact]
+    public void ASegmentsWayOutSurvivesEditing()
+    {
+        Rotation source = Example with
+        {
+            Segments =
+            [
+                Example.Segments[0],
+                Example.Segments[1] with
+                {
+                    Branches = [new RotationBranch { When = [StepCondition.Parse("ult:3")], To = "o1" }],
+                },
+            ],
+        };
+
+        var document = RotationDocument.From(source);
+        SegmentModel cycle = document.Segments.Single(s => s.Id == "cycle");
+
+        Assert.Single(cycle.Branches);
+        Assert.True(cycle.CanLeave);
+        Assert.Equal(source, document.ToRotation());
+    }
+
+    [Fact]
+    public void ANewSegmentArrivesWithAStepAndNothingPointingAtIt()
+    {
+        var document = RotationDocument.From(Example);
+        int before = document.Segments.Count;
+
+        StepModel step = document.AddSegment();
+
+        Assert.Equal(before + 1, document.Segments.Count);
+        Assert.Equal(document.Segments[^1].Id, step.SegmentId);
+        Assert.DoesNotContain(document.Steps, s => s.Branches.Any(b => b.To == step.Id));
+        Assert.DoesNotContain(document.Steps, s => s.NextId == step.Id);
+        Assert.DoesNotContain(
+            RotationValidator.Validate(document.ToRotation()),
+            p => p.Severity == ProfileProblemSeverity.Error);
+    }
+
+    [Fact]
     public void RetypingASegmentKeepsWhatWasSetUpAroundIt()
     {
         var document = RotationDocument.From(Example);

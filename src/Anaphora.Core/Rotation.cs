@@ -268,22 +268,64 @@ public readonly record struct StepCondition(ConditionKind Kind, int Value)
     };
 }
 
+/// <summary>How a branch's conditions add up.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<BranchMatch>))]
+public enum BranchMatch
+{
+    /// <summary>Every condition has to hold. The default, and what a bare list means.</summary>
+    All,
+
+    /// <summary>Any one of them is enough.</summary>
+    Any,
+}
+
 /// <summary>An alternative way out of a step, suggested while its conditions hold.</summary>
 public sealed record RotationBranch
 {
     public IReadOnlyList<StepCondition> When { get; init; } = [];
 
+    /// <summary>
+    /// Whether <see cref="When"/> is an and or an or. "All" is the default, so
+    /// a branch written as a plain list of conditions means what it looks like.
+    /// There is no nesting: one branch is one and-list or one or-list, and
+    /// anything more complicated is two branches to the same step.
+    /// </summary>
+    public BranchMatch Match { get; init; }
+
     /// <summary>The <see cref="RotationStep.Id"/> to go to.</summary>
     public required string To { get; init; }
 
-    public bool Equals(RotationBranch? other) =>
-        other is not null && To == other.To && When.SequenceEqual(other.When);
+    /// <summary>True when the conditions are met -- vacuously so when there are none.</summary>
+    public bool Holds(Func<StepCondition, bool> test)
+    {
+        ArgumentNullException.ThrowIfNull(test);
+        return When.Count == 0 || (Match == BranchMatch.Any ? When.Any(test) : When.All(test));
+    }
 
-    public override int GetHashCode() => HashCode.Combine(To, When.Count);
+    public bool Equals(RotationBranch? other) =>
+        other is not null && To == other.To && Match == other.Match && When.SequenceEqual(other.When);
+
+    public override int GetHashCode() => HashCode.Combine(To, Match, When.Count);
 }
 
-/// <summary>A named run of steps, drawn as one lane: "开局", "循环".</summary>
-public sealed record RotationSegment(string Id, string Name);
+/// <summary>
+/// A named run of steps, drawn as one lane: "开局", "循环".
+///
+/// <see cref="Branches"/> are the segment's own ways out: unlike a step's branch,
+/// which is only looked at when that step finishes, these are looked at after
+/// every step in the segment. That is what "as soon as this holds, leave this
+/// segment" needs -- waiting for the segment's last step would mean finishing
+/// a whole round of it first.
+/// </summary>
+public sealed record RotationSegment(string Id, string Name)
+{
+    public IReadOnlyList<RotationBranch> Branches { get; init; } = [];
+
+    public bool Equals(RotationSegment? other) =>
+        other is not null && Id == other.Id && Name == other.Name && Branches.SequenceEqual(other.Branches);
+
+    public override int GetHashCode() => HashCode.Combine(Id, Name, Branches.Count);
+}
 
 /// <summary>
 /// A state in the rotation: one input the HUD can confirm, the soft cues that
@@ -343,9 +385,20 @@ public sealed record RotationStep
 }
 
 /// <summary>A way out of a step, resolved to an index into <see cref="Rotation.Steps"/>.</summary>
-public readonly record struct RotationEdge(int To, bool NewRound, IReadOnlyList<StepCondition> When)
+public readonly record struct RotationEdge(
+    int To,
+    bool NewRound,
+    IReadOnlyList<StepCondition> When,
+    BranchMatch Match = BranchMatch.All)
 {
     public bool IsDefault => When.Count == 0;
+
+    /// <summary>True when the conditions are met -- vacuously so for the default way.</summary>
+    public bool Holds(Func<StepCondition, bool> test)
+    {
+        ArgumentNullException.ThrowIfNull(test);
+        return When.Count == 0 || (Match == BranchMatch.Any ? When.Any(test) : When.All(test));
+    }
 }
 
 /// <summary>
@@ -406,19 +459,39 @@ public sealed record Rotation
             : new RotationEdge(0, true, []);
     }
 
-    /// <summary>Every way out of step <paramref name="index"/>: branches first, in order, then the default.</summary>
+    /// <summary>
+    /// Every way out of step <paramref name="index"/>: its own branches first,
+    /// then the ways out of the segment it is in, then the default. The step's
+    /// own branches win because they are the more specific statement.
+    /// </summary>
     public IEnumerable<RotationEdge> Edges(int index)
     {
         foreach (RotationBranch branch in Steps[index].Branches)
         {
-            int target = IndexOf(branch.To);
-            if (target >= 0)
+            if (IndexOf(branch.To) is >= 0 and int target)
             {
-                yield return new RotationEdge(target, false, branch.When);
+                yield return new RotationEdge(target, false, branch.When, branch.Match);
+            }
+        }
+
+        foreach (RotationBranch branch in SegmentBranches(index))
+        {
+            // A segment's way out that leads back into the same segment would
+            // be a loop with no end; the validator says so, and it is skipped.
+            if (IndexOf(branch.To) is >= 0 and int target && Steps[target].Segment != Steps[index].Segment)
+            {
+                yield return new RotationEdge(target, false, branch.When, branch.Match);
             }
         }
 
         yield return DefaultEdge(index);
+    }
+
+    /// <summary>The ways out declared on the segment step <paramref name="index"/> is in.</summary>
+    public IReadOnlyList<RotationBranch> SegmentBranches(int index)
+    {
+        string? id = Steps[index].Segment;
+        return id is null ? [] : Segments.FirstOrDefault(s => s.Id == id)?.Branches ?? [];
     }
 
     public string SegmentName(int index)

@@ -89,7 +89,13 @@ internal sealed partial class RotationDocument : ObservableObject
 
         foreach (RotationSegment segment in source.Segments)
         {
-            Segments.Add(new SegmentModel(segment.Id, segment.Name));
+            var model = new SegmentModel(segment.Id, segment.Name);
+            foreach (RotationBranch branch in segment.Branches)
+            {
+                model.Branches.Add(BranchModel.From(branch));
+            }
+
+            Segments.Add(model);
         }
 
         // Steps written without a segment get one, so every step has a lane.
@@ -145,7 +151,13 @@ internal sealed partial class RotationDocument : ObservableObject
         ProfileId = ProfileId,
         ControlledSlot = ControlledSlot,
         Notes = Notes,
-        Segments = [.. Segments.Select(s => new RotationSegment(s.Id, s.Name))],
+        Segments =
+        [
+            .. Segments.Select(s => new RotationSegment(s.Id, s.Name)
+            {
+                Branches = [.. s.Branches.Select(b => b.ToBranch())],
+            }),
+        ],
         Steps = [.. Steps.Select(s => s.ToStep())],
     };
 
@@ -436,6 +448,27 @@ internal sealed partial class RotationDocument : ObservableObject
         }
     }
 
+    /// <summary>
+    /// A new lane at the end, with one step in it and nothing pointing at it
+    /// yet. Unlike <see cref="AddSegment"/> this makes no branch: a segment is
+    /// what the overlay shows one of at a time, so wanting another one is not
+    /// the same as wanting a branch into it.
+    /// </summary>
+    public StepModel AddSegment()
+    {
+        var segment = new SegmentModel(FreeSegmentId(), "新的一段");
+        var step = new StepModel(this, FreeStepId(), segment.Id, new RotationAction(ControlledSlot, ActionKind.Skill));
+
+        Batch(() =>
+        {
+            Segments.Add(segment);
+            Steps.Add(step);
+            Reorder([.. Segments.SelectMany(StepsIn)]);
+        });
+
+        return step;
+    }
+
     /// <summary>A new lane with one step in it, reached as a branch from <paramref name="from"/>.</summary>
     public StepModel AddSegment(StepModel from)
     {
@@ -449,7 +482,7 @@ internal sealed partial class RotationDocument : ObservableObject
             step.NextId = afterFrom.Id;
             step.NewRound = afterFrom == Steps[0];
             Steps.Add(step);
-            from.Branches.Add(new BranchModel(new ConditionModel(ConditionKind.PromptLeads, step.Action.Slot), step.Id));
+            from.Branches.Add(new BranchModel(step.Id, new ConditionModel(ConditionKind.PromptLeads, step.Action.Slot)));
         });
 
         return step;
@@ -588,9 +621,14 @@ internal sealed partial class RotationDocument : ObservableObject
                 Options.Add(option);
             }
 
-            foreach (BranchModel branch in Steps.SelectMany(s => s.Branches))
+            foreach (BranchModel branch in Steps.SelectMany(s => s.Branches).Concat(Segments.SelectMany(s => s.Branches)))
             {
                 branch.Reselect();
+            }
+
+            foreach (SegmentModel segment in Segments)
+            {
+                segment.Refresh();
             }
         }
         finally
@@ -615,20 +653,83 @@ internal sealed partial class RotationDocument : ObservableObject
         foreach (INotifyPropertyChanged item in e.NewItems?.OfType<INotifyPropertyChanged>() ?? [])
         {
             Watch(item);
+            if (item is SegmentModel segment)
+            {
+                segment.Adopt(this);
+            }
         }
 
         Raise();
     }
 }
 
-internal sealed partial class SegmentModel(string id, string name) : ObservableObject
+/// <summary>
+/// A lane, and the segment's own ways out. A step's branch is only looked at when
+/// that step finishes; these are looked at after every step in the segment, so
+/// "as soon as this holds, leave" does not have to wait for the last one.
+/// </summary>
+internal sealed partial class SegmentModel : ObservableObject
 {
-    public string Id { get; } = id;
+    private RotationDocument? owner;
+
+    public SegmentModel(string id, string name)
+    {
+        Id = id;
+        Name = name;
+        Branches.CollectionChanged += OnBranchesChanged;
+    }
+
+    public string Id { get; }
 
     [ObservableProperty]
-    public partial string Name { get; set; } = name;
+    public partial string Name { get; set; }
+
+    public ObservableCollection<BranchModel> Branches { get; } = [];
 
     public override string ToString() => Name;
+
+    /// <summary>True while there is somewhere outside this segment to go.</summary>
+    public bool CanLeave => owner is { } document && document.Steps.Any(s => s.SegmentId != Id);
+
+    internal void Adopt(RotationDocument document)
+    {
+        owner = document;
+        foreach (BranchModel branch in Branches)
+        {
+            Attach(branch);
+        }
+    }
+
+    internal void Refresh() => OnPropertyChanged(nameof(CanLeave));
+
+    [RelayCommand]
+    private void AddWayOut()
+    {
+        if (owner?.Steps.FirstOrDefault(s => s.SegmentId != Id) is { } target)
+        {
+            Branches.Add(new BranchModel(target.Id, new ConditionModel(ConditionKind.UltimateReady, target.Slot)));
+        }
+    }
+
+    private void OnBranchesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        foreach (BranchModel branch in e.NewItems?.OfType<BranchModel>() ?? [])
+        {
+            Attach(branch);
+        }
+
+        owner?.Raise();
+    }
+
+    private void Attach(BranchModel branch)
+    {
+        branch.Removal = () => Branches.Remove(branch);
+        if (owner is { } document)
+        {
+            document.Watch(branch);
+            branch.Adopt(document);
+        }
+    }
 }
 
 /// <summary>One step of the rotation, as the inspector edits it.</summary>
@@ -813,7 +914,7 @@ internal sealed partial class StepModel : ObservableObject
     private void AddBranch()
     {
         StepModel target = document.Steps.FirstOrDefault(s => s != this && s != document.DefaultNext(this).To) ?? document.Steps[0];
-        Branches.Add(new BranchModel(new ConditionModel(ConditionKind.PromptLeads, target.Slot), target.Id));
+        Branches.Add(new BranchModel(target.Id, new ConditionModel(ConditionKind.PromptLeads, target.Slot)));
     }
 
     [RelayCommand]
@@ -837,14 +938,9 @@ internal sealed partial class StepModel : ObservableObject
                 entry.Removal = () => list.Remove(entry);
             }
 
-            if (item is BranchModel owned)
-            {
-                owned.Owner = document;
-            }
-
             if (item is BranchModel branch)
             {
-                document.Watch(branch.Condition);
+                branch.Adopt(document);
             }
         }
 
@@ -930,20 +1026,69 @@ internal sealed record ConditionChoice(ConditionKind Kind, string Label)
     public override string ToString() => Label;
 }
 
-internal sealed partial class BranchModel(ConditionModel condition, string to) : ListItemModel
+internal sealed record BranchMatchChoice(BranchMatch Match, string Label)
 {
-    /// <summary>Conditions beyond the first, kept as they were: the form edits one.</summary>
-    private IReadOnlyList<StepCondition> extra = [];
+    public static IReadOnlyList<BranchMatchChoice> Choices { get; } =
+    [
+        new(BranchMatch.All, "全部满足"),
+        new(BranchMatch.Any, "任一满足"),
+    ];
 
-    public ConditionModel Condition { get; } = condition;
+    public override string ToString() => Label;
+}
+
+/// <summary>
+/// One way out, as the inspector edits it: a list of conditions, whether they
+/// are an and or an or, and where it goes. Used both for a step's own branches
+/// and for a segment's.
+/// </summary>
+internal sealed partial class BranchModel : ListItemModel
+{
+    public BranchModel(string to, params ConditionModel[] conditions)
+    {
+        To = to;
+        Conditions.CollectionChanged += OnConditionsChanged;
+        foreach (ConditionModel condition in conditions)
+        {
+            Conditions.Add(condition);
+        }
+    }
+
+    public ObservableCollection<ConditionModel> Conditions { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MatchChoice))]
+    public partial BranchMatch Match { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Target))]
-    public partial string To { get; set; } = to;
+    public partial string To { get; set; }
 
     internal RotationDocument? Owner { get; set; }
 
     public IReadOnlyList<StepOption> Options => Owner?.Options ?? (IReadOnlyList<StepOption>)[];
+
+    /// <summary>And or or, for the combo box. Only worth showing once there are two conditions.</summary>
+    public BranchMatchChoice MatchChoice
+    {
+        get => BranchMatchChoice.Choices.First(c => c.Match == Match);
+        set
+        {
+            if (value is not null)
+            {
+                Match = value.Match;
+            }
+        }
+    }
+
+    public bool HasChoiceOfMatch => Conditions.Count > 1;
+
+    /// <summary>"1 大招就绪 且 2 大招就绪", for the arrow's label on the graph.</summary>
+    public string Summary => Conditions.Count == 0
+        ? "无条件"
+        : string.Join(
+            Match == BranchMatch.Any ? " 或 " : " 且 ",
+            Conditions.Select(c => c.ToCondition().Description));
 
     /// <summary>The target as a combo box item. A combo box clearing itself writes null, which is ignored.</summary>
     public StepOption? Target
@@ -960,13 +1105,50 @@ internal sealed partial class BranchModel(ConditionModel condition, string to) :
 
     internal void Reselect() => OnPropertyChanged(nameof(Target));
 
-    public static BranchModel From(RotationBranch branch)
+    public static BranchModel From(RotationBranch branch) =>
+        new(branch.To, [.. branch.When.Select(c => new ConditionModel(c.Kind, c.Value))]) { Match = branch.Match };
+
+    public RotationBranch ToBranch() => new()
     {
-        StepCondition first = branch.When.Count > 0 ? branch.When[0] : new StepCondition(ConditionKind.PromptLeads, 1);
-        return new BranchModel(new ConditionModel(first.Kind, first.Value), branch.To) { extra = [.. branch.When.Skip(1)] };
+        When = [.. Conditions.Select(c => c.ToCondition())],
+        Match = Match,
+        To = To,
+    };
+
+    [RelayCommand]
+    private void AddCondition(string kind) => Conditions.Add(kind switch
+    {
+        "sp" => new ConditionModel(ConditionKind.SkillPoints, 1),
+        "chain" => new ConditionModel(ConditionKind.ChainReady, 1),
+        "ult" => new ConditionModel(ConditionKind.UltimateReady, 1),
+        _ => new ConditionModel(ConditionKind.PromptLeads, 1),
+    });
+
+    private void OnConditionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        foreach (ConditionModel condition in e.NewItems?.OfType<ConditionModel>() ?? [])
+        {
+            Owner?.Watch(condition);
+            condition.Removal = () => Conditions.Remove(condition);
+        }
+
+        OnPropertyChanged(nameof(HasChoiceOfMatch));
+        Owner?.Raise();
     }
 
-    public RotationBranch ToBranch() => new() { When = [Condition.ToCondition(), .. extra], To = To };
+    /// <summary>
+    /// The document arrives after the conditions do, when a branch is read from
+    /// a file; everything already in the list has to be picked up then.
+    /// </summary>
+    internal void Adopt(RotationDocument document)
+    {
+        Owner = document;
+        foreach (ConditionModel condition in Conditions)
+        {
+            document.Watch(condition);
+            condition.Removal = () => Conditions.Remove(condition);
+        }
+    }
 }
 
 /// <summary>An entry in one of a step's lists, able to take itself out of it.</summary>

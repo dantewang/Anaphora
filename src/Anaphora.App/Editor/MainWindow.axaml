@@ -472,6 +472,8 @@
             <Button Classes="ghost" Content="＋ 在后面插入" Command="{Binding InsertStepCommand}" />
             <Button Classes="ghost" Content="✂ 在这里分段" Command="{Binding SplitSegmentCommand}"
                     ToolTip.Tip="这一步和它后面的同段步骤归入新的一段；overlay 一次显示一段" />
+            <Button Classes="ghost" Content="＋ 新建分段" Command="{Binding AddSegmentCommand}"
+                    ToolTip.Tip="在最后加一段空的，只有一步；谁指向它由你定" />
             <Button Classes="ghost" Content="⑂ 从这里分支" Command="{Binding BranchFromStepCommand}" />
             <Button Classes="ghost" Content="删除这一步" Command="{Binding DeleteStepCommand}" />
           </StackPanel>
@@ -490,7 +492,25 @@
         <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                       Background="{StaticResource Ground}">
           <ed:RotationGraph Document="{Binding Document}" SelectedStep="{Binding SelectedStep}"
-                            HorizontalAlignment="Left" VerticalAlignment="Top">
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            ContextRequested="OnGraphContextRequested">
+            <!-- Right-clicking a lane's title edits the segment instead; see
+                 the code-behind, which cancels this menu for that case. -->
+            <FlyoutBase.AttachedFlyout>
+              <Flyout Placement="Pointer">
+                <StackPanel Spacing="8" Width="240">
+                  <TextBlock Classes="h" Text="SEGMENT  这一段" />
+                  <TextBox Text="{Binding QuickSegment.Name, FallbackValue=''}" PlaceholderText="段名" />
+                  <WrapPanel ItemSpacing="6" LineSpacing="6">
+                    <Button Classes="ghost" Content="↑ 往前挪" Command="{Binding MoveSegmentUpCommand}" />
+                    <Button Classes="ghost" Content="↓ 往后挪" Command="{Binding MoveSegmentDownCommand}" />
+                    <Button Classes="ghost" Content="＋ 新建分段" Command="{Binding AddSegmentCommand}" />
+                    <Button Classes="ghost" Content="✕ 删掉这一段" Command="{Binding DeleteSegmentCommand}" />
+                  </WrapPanel>
+                  <TextBlock Classes="dim" TextWrapping="Wrap" Text="删掉一段会连它的步骤一起删。整段的去向在右边的属性里设。" />
+                </StackPanel>
+              </Flyout>
+            </FlyoutBase.AttachedFlyout>
             <ed:RotationGraph.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="在后面插入一步" Command="{Binding InsertStepCommand}" />
@@ -681,14 +701,39 @@
                   <DataTemplate x:DataType="ed:BranchModel">
                     <Border Classes="item edge">
                       <DockPanel>
-                        <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除" />
+                        <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除整条分支" VerticalAlignment="Top" />
                         <StackPanel Spacing="4">
                           <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Text="若" VerticalAlignment="Center" />
-                            <ComboBox Classes="mini" ItemsSource="{x:Static ed:ConditionModel.Choices}" SelectedItem="{Binding Condition.Choice}" />
-                            <ComboBox Classes="mini" ItemsSource="{Binding Condition.Values}" SelectedItem="{Binding Condition.Value}" />
-                            <TextBlock Classes="muted" Text="{Binding Condition.ValueLabel}" VerticalAlignment="Center" />
+                            <ComboBox Classes="mini" ItemsSource="{x:Static ed:BranchMatchChoice.Choices}"
+                                      SelectedItem="{Binding MatchChoice}" IsVisible="{Binding HasChoiceOfMatch}"
+                                      ToolTip.Tip="全部满足是「且」，任一满足是「或」" />
                           </StackPanel>
+                          <ItemsControl ItemsSource="{Binding Conditions}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <StackPanel Spacing="4" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="ed:ConditionModel">
+                                <DockPanel>
+                                  <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除这个条件" />
+                                  <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <ComboBox Classes="mini" ItemsSource="{x:Static ed:ConditionModel.Choices}" SelectedItem="{Binding Choice}" />
+                                    <ComboBox Classes="mini" ItemsSource="{Binding Values}" SelectedItem="{Binding Value}" />
+                                    <TextBlock Classes="muted" Text="{Binding ValueLabel}" VerticalAlignment="Center" />
+                                  </StackPanel>
+                                </DockPanel>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <WrapPanel ItemSpacing="4" LineSpacing="4">
+                            <Button Classes="add" Content="+ 技能点" Command="{Binding AddConditionCommand}" CommandParameter="sp" />
+                            <Button Classes="add" Content="+ 连携就绪" Command="{Binding AddConditionCommand}" CommandParameter="chain" />
+                            <Button Classes="add" Content="+ 大招就绪" Command="{Binding AddConditionCommand}" CommandParameter="ult" />
+                            <Button Classes="add" Content="+ 提示在前" Command="{Binding AddConditionCommand}" CommandParameter="prompt" />
+                          </WrapPanel>
                           <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="→" VerticalAlignment="Center" Margin="0,0,8,0" />
                             <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Target}" HorizontalAlignment="Stretch" />
@@ -703,6 +748,73 @@
                 <Button Classes="add" Content="+ 条件分支" Command="{Binding SelectedStep.AddBranchCommand, FallbackValue={x:Null}}" />
               </WrapPanel>
               <TextBlock Classes="dim" Text="条件决定 overlay 提示哪条路；实际走哪条看识别到的操作，临场换路也跟得上。" />
+            </StackPanel>
+            <Border Classes="rule" />
+
+            <StackPanel Classes="group">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Text="本段任何一步之后都判" VerticalAlignment="Bottom" />
+                <TextBlock Classes="h" Text="SEGMENT  整段的去向" />
+              </DockPanel>
+              <TextBlock Classes="dim" TextWrapping="Wrap"
+                         Text="上面那种分支只在它自己那一步做完时判一次；这里的在本段每一步之后都判，条件一成立就离开这一段，不用把这一段走完。" />
+              <ItemsControl ItemsSource="{Binding StepSegment.Branches, FallbackValue={x:Null}}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ed:BranchModel">
+                    <Border Classes="item edge">
+                      <DockPanel>
+                        <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除整条去向" VerticalAlignment="Top" />
+                        <StackPanel Spacing="4">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="若" VerticalAlignment="Center" />
+                            <ComboBox Classes="mini" ItemsSource="{x:Static ed:BranchMatchChoice.Choices}"
+                                      SelectedItem="{Binding MatchChoice}" IsVisible="{Binding HasChoiceOfMatch}"
+                                      ToolTip.Tip="全部满足是「且」，任一满足是「或」" />
+                          </StackPanel>
+                          <ItemsControl ItemsSource="{Binding Conditions}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <StackPanel Spacing="4" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="ed:ConditionModel">
+                                <DockPanel>
+                                  <Button DockPanel.Dock="Right" Classes="x" Command="{Binding RemoveCommand}" ToolTip.Tip="删除这个条件" />
+                                  <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <ComboBox Classes="mini" ItemsSource="{x:Static ed:ConditionModel.Choices}" SelectedItem="{Binding Choice}" />
+                                    <ComboBox Classes="mini" ItemsSource="{Binding Values}" SelectedItem="{Binding Value}" />
+                                    <TextBlock Classes="muted" Text="{Binding ValueLabel}" VerticalAlignment="Center" />
+                                  </StackPanel>
+                                </DockPanel>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <WrapPanel ItemSpacing="4" LineSpacing="4">
+                            <Button Classes="add" Content="+ 技能点" Command="{Binding AddConditionCommand}" CommandParameter="sp" />
+                            <Button Classes="add" Content="+ 连携就绪" Command="{Binding AddConditionCommand}" CommandParameter="chain" />
+                            <Button Classes="add" Content="+ 大招就绪" Command="{Binding AddConditionCommand}" CommandParameter="ult" />
+                            <Button Classes="add" Content="+ 提示在前" Command="{Binding AddConditionCommand}" CommandParameter="prompt" />
+                          </WrapPanel>
+                          <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="→" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Target}" HorizontalAlignment="Stretch" />
+                          </DockPanel>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <WrapPanel>
+                <Button Classes="add" Content="+ 整段的去向" Command="{Binding StepSegment.AddWayOutCommand, FallbackValue={x:Null}}"
+                        IsEnabled="{Binding StepSegment.CanLeave, FallbackValue=False}" />
+              </WrapPanel>
             </StackPanel>
             <Border Classes="rule" />
 

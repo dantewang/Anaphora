@@ -411,6 +411,36 @@ public static class RotationValidator
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var segments = rotation.Segments.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
 
+        foreach (RotationSegment segment in rotation.Segments)
+        {
+            string where = $"segment '{segment.Name}'";
+            foreach (RotationBranch branch in segment.Branches)
+            {
+                int target = rotation.IndexOf(branch.To);
+                if (target < 0)
+                {
+                    Error($"{where}: way out to '{branch.To}' is not a step.");
+                }
+                else if (rotation.Steps[target].Segment == segment.Id)
+                {
+                    Error($"{where}: its way out leads to '{branch.To}', which is in the same segment.");
+                }
+
+                if (branch.When.Count == 0)
+                {
+                    Warn($"{where}: a way out with no conditions always applies, so the segment never runs past its first step.");
+                }
+
+                foreach (StepCondition condition in branch.When)
+                {
+                    if (!condition.IsValid)
+                    {
+                        Error($"{where}: condition '{condition}' is out of range.");
+                    }
+                }
+            }
+        }
+
         for (int i = 0; i < rotation.Steps.Count; i++)
         {
             RotationStep step = rotation.Steps[i];

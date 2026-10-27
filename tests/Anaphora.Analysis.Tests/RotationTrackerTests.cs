@@ -355,12 +355,37 @@ public class RotationTrackerTests
         See(tracker, hud, [Chain(2)]);
         Assert.Equal("1", Now(tracker));
 
+        // A new way out has to hold for two frames before it is taken.
+        See(tracker, hud with { Lead = 4 });
+        Assert.Equal("1", Now(tracker));
         See(tracker, hud with { Lead = 4 });
         Assert.Equal("4E", Now(tracker));
 
-        // The prompt going away changes the suggestion back.
+        // The prompt going away changes the suggestion back, once it sticks.
+        See(tracker, hud);
         See(tracker, hud);
         Assert.Equal("1", Now(tracker));
+    }
+
+    [Fact]
+    public void AReadingThatWobblesDoesNotFlickTheCursorBetweenWays()
+    {
+        // The ultimate ring and the chain bars are colour thresholds, and a
+        // frame on the wrong side of one must not throw the cursor into
+        // another segment and back.
+        var tracker = new RotationTracker(Branching);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(3)]);
+        See(tracker, hud, [Chain(2)]);
+        Assert.Equal("1", Now(tracker));
+
+        for (int frame = 0; frame < 6; frame++)
+        {
+            See(tracker, frame % 2 == 0 ? hud with { Lead = 4 } : hud);
+            Assert.Equal("1", Now(tracker));
+        }
     }
 
     [Fact]
@@ -379,6 +404,77 @@ public class RotationTrackerTests
 
         Assert.Empty(state.Unexpected);
         Assert.Equal("3大招", Now(tracker));
+    }
+
+    [Fact]
+    public void AnAndBranchWaitsForEveryCondition()
+    {
+        // The user's rotation: charge until 1, 2 and 4 can all ult, then burst.
+        // Written as three one-condition branches this fires on the first of
+        // them, which is a whole round and a half early.
+        var tracker = new RotationTracker(Gated(BranchMatch.All));
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud with { Ult1 = true }, [Skill(1)]);
+        See(tracker, hud with { Ult1 = true }, [Skill(1)]);
+        Assert.Equal("1", Now(tracker));
+
+        See(tracker, hud with { Ult1 = true, Ult2 = true });
+        See(tracker, hud with { Ult1 = true, Ult2 = true });
+        Assert.Equal("1", Now(tracker));
+
+        See(tracker, hud with { Ult1 = true, Ult2 = true, Ult4 = true });
+        See(tracker, hud with { Ult1 = true, Ult2 = true, Ult4 = true });
+        Assert.Equal("3", Now(tracker));
+    }
+
+    [Fact]
+    public void AnOrBranchTakesTheFirstConditionThatHolds()
+    {
+        var tracker = new RotationTracker(Gated(BranchMatch.Any));
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(1)]);
+        See(tracker, hud with { Ult2 = true });
+        See(tracker, hud with { Ult2 = true });
+
+        Assert.Equal("3", Now(tracker));
+    }
+
+    [Fact]
+    public void ASegmentsWayOutIsTakenFromAnyStepInIt()
+    {
+        // Hung on the last step, the way out is only looked at once a whole
+        // round of the segment is done. The player topping an ultimate up
+        // mid-round wants to leave as soon as it is full.
+        var tracker = new RotationTracker(Interrupted);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(1)]);
+        Assert.Equal("2", Now(tracker));
+
+        See(tracker, hud with { Ult3 = true }, [Skill(2)]);
+        See(tracker, hud with { Ult3 = true });
+
+        Assert.Equal("3大招", Now(tracker));
+        Assert.Equal("爆发", tracker.State.SegmentName);
+    }
+
+    [Fact]
+    public void ASegmentsWayOutLeavesTheOrdinaryRunAlone()
+    {
+        var tracker = new RotationTracker(Interrupted);
+        var hud = new Hud(3);
+
+        See(tracker, hud);
+        See(tracker, hud, [Skill(1)]);
+        See(tracker, hud, [Skill(2)]);
+
+        Assert.Equal("4", Now(tracker));
+        Assert.Equal("主线", tracker.State.SegmentName);
     }
 
     [Fact]
@@ -408,6 +504,53 @@ public class RotationTrackerTests
             new RotationStep { Id = "m3", Segment = "m", Action = RotationAction.Parse("1") },
             new RotationStep { Id = "m4", Segment = "m", Action = RotationAction.Parse("3大招"), Next = "m1", NewRound = true },
             new RotationStep { Id = "x1", Segment = "x", Action = RotationAction.Parse("4E"), Next = "m4" },
+        ],
+    };
+
+    /// <summary>1, 1, 1 … and out to a burst segment once the ultimates say so.</summary>
+    private static Rotation Gated(BranchMatch match) => Example with
+    {
+        Segments = [new RotationSegment("main", "主线"), new RotationSegment("burst", "爆发")],
+        Steps =
+        [
+            new RotationStep
+            {
+                Id = "g1",
+                Segment = "main",
+                Action = RotationAction.Parse("1"),
+                Next = "g1",
+                NewRound = true,
+                Branches =
+                [
+                    new RotationBranch
+                    {
+                        Match = match,
+                        When = [StepCondition.Parse("ult:1"), StepCondition.Parse("ult:2"), StepCondition.Parse("ult:4")],
+                        To = "b1",
+                    },
+                ],
+            },
+            new RotationStep { Id = "b1", Segment = "burst", Action = RotationAction.Parse("3") },
+        ],
+    };
+
+    /// <summary>A three-step main segment that may be left at any point once 3 can ult.</summary>
+    private static readonly Rotation Interrupted = Example with
+    {
+        Segments =
+        [
+            new RotationSegment("main", "主线")
+            {
+                Branches = [new RotationBranch { When = [StepCondition.Parse("ult:3")], To = "b1" }],
+            },
+            new RotationSegment("burst", "爆发"),
+        ],
+        Steps =
+        [
+            new RotationStep { Id = "m1", Segment = "main", Action = RotationAction.Parse("1") },
+            new RotationStep { Id = "m2", Segment = "main", Action = RotationAction.Parse("2") },
+            new RotationStep { Id = "m3", Segment = "main", Action = RotationAction.Parse("4"), Next = "m1", NewRound = true },
+            new RotationStep { Id = "b1", Segment = "burst", Action = RotationAction.Parse("3大招") },
         ],
     };
 

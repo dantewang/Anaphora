@@ -81,6 +81,15 @@ public sealed record RotationTrackerOptions
     public int Upcoming { get; init; } = 3;
 
     /// <summary>
+    /// How many readable frames in a row have to agree before the suggested
+    /// way out changes under a player who has not moved yet. The readings
+    /// behind a branch sit on colour thresholds -- the ultimate ring's most of
+    /// all -- and one frame on the wrong side of one should not throw the
+    /// cursor into another segment and back.
+    /// </summary>
+    public int SettleFrames { get; init; } = 2;
+
+    /// <summary>
     /// With neither a readable HUD nor a key for this long, the fight is taken
     /// to be over and the next one starts at the first step. Both halves matter:
     /// a cut-in hides the HUD for seconds at exactly the moment the player is
@@ -135,6 +144,9 @@ public sealed class RotationTracker
 
     /// <summary>The step last completed, while the way on from it is still being decided.</summary>
     private RotationCursor? from;
+
+    /// <summary>A way out that wants to replace the current one, and how many frames have agreed.</summary>
+    private (RotationCursor At, int Seen)? settling;
 
     /// <summary>The last frame the HUD could be read in, for conditions and prompts.</summary>
     private HudSnapshot? readable;
@@ -319,6 +331,7 @@ public sealed class RotationTracker
     {
         cursor = Start;
         from = null;
+        settling = null;
         readable = null;
         history.Clear();
     }
@@ -326,27 +339,49 @@ public sealed class RotationTracker
     private void Complete(RotationCursor done, HudSnapshot? snapshot)
     {
         from = done;
+        settling = null;
         cursor = Follow(done, Suggested(done.Step, snapshot));
     }
 
-    /// <summary>While the player has not moved on, the suggested way out may change with the HUD.</summary>
+    /// <summary>
+    /// While the player has not moved on, the suggested way out may change with
+    /// the HUD -- a chain prompt appearing, an ultimate coming up. It has to
+    /// agree with itself for <see cref="RotationTrackerOptions.SettleFrames"/>
+    /// frames first, so a reading that wobbles across its threshold cannot
+    /// flick the cursor between two segments.
+    /// </summary>
     private void Redecide(HudSnapshot snapshot)
     {
-        if (from is RotationCursor done)
+        if (from is not RotationCursor done)
         {
-            cursor = Follow(done, Suggested(done.Step, snapshot));
+            settling = null;
+            return;
+        }
+
+        RotationCursor want = Follow(done, Suggested(done.Step, snapshot));
+        if (want == cursor)
+        {
+            settling = null;
+            return;
+        }
+
+        settling = settling is { } pending && pending.At == want ? pending with { Seen = pending.Seen + 1 } : (want, 1);
+        if (settling.Value.Seen >= options.SettleFrames)
+        {
+            cursor = want;
+            settling = null;
         }
     }
 
     private static RotationCursor Follow(RotationCursor at, RotationEdge edge) =>
         new(edge.To, edge.NewRound ? at.Round + 1 : at.Round);
 
-    /// <summary>The first branch whose conditions all hold, else the default way.</summary>
+    /// <summary>The first branch whose conditions hold, else the default way.</summary>
     private RotationEdge Suggested(int step, HudSnapshot? snapshot)
     {
         foreach (RotationEdge edge in rotation.Edges(step))
         {
-            if (edge.IsDefault || (snapshot is not null && edge.When.All(c => Holds(c, snapshot))))
+            if (edge.IsDefault || (snapshot is not null && edge.Holds(c => Holds(c, snapshot))))
             {
                 return edge;
             }
@@ -419,6 +454,7 @@ public sealed class RotationTracker
 
         cursor = new RotationCursor(target, round);
         from = null;
+        settling = null;
         history.Clear();
         return true;
 

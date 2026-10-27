@@ -51,6 +51,10 @@ internal sealed class RotationGraph : Control
     private static readonly IBrush Ground = Brush("#0A0B0B");
     private static readonly IBrush Dots = Brush("#1D2020");
 
+    /// <summary>Every other lane sits on a band, so where one segment ends is never in doubt.</summary>
+    private static readonly IBrush LaneBand = Brush("#14191A");
+    private static readonly IBrush LaneEdge = Brush("#232829");
+
     private readonly Dictionary<StepModel, Rect> cards = [];
     private readonly List<Lane> lanes = [];
     private RotationDocument? watched;
@@ -99,6 +103,20 @@ internal sealed class RotationGraph : Control
         return extent;
     }
 
+    /// <summary>The segment whose title is under <paramref name="at"/>, for the right-click menu.</summary>
+    public SegmentModel? SegmentAt(Point at)
+    {
+        foreach (Lane lane in lanes)
+        {
+            if (at.X < Pad + LabelWidth && at.Y >= lane.Top && at.Y <= lane.Bottom)
+            {
+                return lane.Segment;
+            }
+        }
+
+        return null;
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -131,10 +149,35 @@ internal sealed class RotationGraph : Control
             return;
         }
 
-        foreach (Lane lane in lanes)
+        for (int i = 0; i < lanes.Count; i++)
         {
+            Lane lane = lanes[i];
+            double top = lane.Top - (LaneGap / 2);
+            double height = lane.Bottom - lane.Top + LaneGap;
+            var band = new Rect(0, top, Math.Max(Bounds.Width, extent.Width), height);
+
+            if (i % 2 == 1)
+            {
+                context.FillRectangle(LaneBand, band);
+            }
+
+            context.FillRectangle(LaneEdge, new Rect(band.X, band.Y, band.Width, 1));
             Draw(context, lane.Segment.Name, Display, 15, FontWeight.SemiBold, Text, new Point(Pad, lane.CardTop + 10));
             Draw(context, string.Create(CultureInfo.InvariantCulture, $"{lane.Count} 步"), Body, 11.5, FontWeight.Normal, Muted, new Point(Pad, lane.CardTop + 32));
+
+            // The segment's own ways out have no card to leave from, so they
+            // are said in the gutter rather than drawn as arrows.
+            double line = lane.CardTop + 52;
+            foreach (BranchModel branch in lane.Segment.Branches)
+            {
+                foreach (FormattedText part in WayOut(document, branch))
+                {
+                    context.DrawText(part, new Point(Pad, line));
+                    line += part.Height;
+                }
+
+                line += 8;
+            }
         }
 
         DrawEdges(context, document);
@@ -205,7 +248,12 @@ internal sealed class RotationGraph : Control
                 right = Math.Max(right, rect.Right);
             }
 
-            double bottom = cardTop + CardHeight + waitZone;
+            // The segment's ways out are written down the gutter and can run
+            // past the cards, so the lane has to be tall enough for them.
+            double gutter = segment.Branches.Count == 0
+                ? 0
+                : 52 + segment.Branches.Sum(b => WayOut(document, b).Sum(p => p.Height) + 8);
+            double bottom = cardTop + Math.Max(CardHeight + waitZone, gutter);
             lanes.Add(new Lane(segment, steps.Count, top, cardTop, bottom));
             top = bottom + LaneGap;
         }
@@ -310,7 +358,7 @@ internal sealed class RotationGraph : Control
             {
                 if (document.Find(branch.To) is { } target && cards.TryGetValue(target, out Rect branchTo))
                 {
-                    string label = $"若 {branch.Condition.ToCondition().Description}";
+                    string label = $"若 {branch.Summary}";
                     if (branchTo.Left > from.Left)
                     {
                         Forward(from, branchTo, branchPen, label, Cyan, fromBottom: true);
@@ -430,6 +478,29 @@ internal sealed class RotationGraph : Control
 
     private static FormattedText Format(string text, FontFamily family, double size, FontWeight weight, IBrush brush) =>
         new(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface(family, FontStyle.Normal, weight), size, brush);
+
+    /// <summary>
+    /// A segment's way out, as the three lines it takes in the gutter. They
+    /// wrap inside the gutter: an edge arrow may run up through the lane right
+    /// beside them, so text that ran past the label column would cross it.
+    /// </summary>
+    private static FormattedText[] WayOut(RotationDocument document, BranchModel branch)
+    {
+        string target = document.Find(branch.To) is { } step ? document.Label(step) : branch.To;
+        return
+        [
+            Gutter("整段去向", FontWeight.SemiBold, Cyan),
+            Gutter($"若 {branch.Summary}", FontWeight.Normal, Muted),
+            Gutter($"→ {target}", FontWeight.Normal, Muted),
+        ];
+    }
+
+    private static FormattedText Gutter(string text, FontWeight weight, IBrush brush)
+    {
+        FormattedText formatted = Format(text, Body, 10, weight, brush);
+        formatted.MaxTextWidth = LabelWidth - 6;
+        return formatted;
+    }
 
     private static void Draw(DrawingContext context, string text, FontFamily family, double size, FontWeight weight, IBrush brush, Point at) =>
         context.DrawText(Format(text, family, size, weight, brush), at);

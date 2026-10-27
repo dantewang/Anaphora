@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
@@ -87,6 +88,26 @@ internal sealed partial class MainWindow : Window, IFileAccess
             e.Cancel = true;
             Hide();
         }
+    }
+
+    /// <summary>
+    /// Right-clicking a lane's title is about the segment, not the step that
+    /// happens to be selected, so it gets its own flyout and the step menu is
+    /// called off.
+    /// </summary>
+    private void OnGraphContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (sender is not RotationGraph graph
+            || DataContext is not MainViewModel model
+            || !e.TryGetPosition(graph, out Point at)
+            || graph.SegmentAt(at) is not { } segment)
+        {
+            return;
+        }
+
+        model.QuickSegment = segment;
+        FlyoutBase.ShowAttachedFlyout(graph);
+        e.Handled = true;
     }
 
     /// <summary>Records a key combination instead of typing it. Backspace or Delete clears it.</summary>
